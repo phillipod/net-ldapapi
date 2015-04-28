@@ -9,15 +9,17 @@ use Test::BDD::Cucumber::StepFile;
 our %TestConfig = %main::TestConfig;
 
 When qr/I've bound with (.+?) authentication to the directory/, sub {
-  my $type = $1;
+  my $type = lc($1);
   
   S->{'bind_result'} = "skipped";
 
   if ($type eq "default") {
     $type = lc($TestConfig{'LDAP'}{'DefaultBindType'});
   }
+
+  S->{'bind_type'} = $type;
   
-  if ($type =~ /anonymous/i) {
+  if ($type eq "anonymous") {
   
     SKIP: {
       skip("anonymous authentication disabled in t/test-config.pl", 1) if $TestConfig{'LDAP'}{'BindTypes'}{'Anonymous'}{'Enabled'} != 1;
@@ -25,7 +27,7 @@ When qr/I've bound with (.+?) authentication to the directory/, sub {
       S->{'bind_result'} = S->{'object'}->bind_s();
     }
 
-  } elsif ($type =~ /simple/i) {
+  } elsif ($type eq "simple") {
 
     SKIP: {
       skip("simple authentication disabled in t/test-config.pl", 1) if $TestConfig{'LDAP'}{'BindTypes'}{'Simple'}{'Enabled'} != 1;

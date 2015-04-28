@@ -6,9 +6,7 @@ use Devel::Cover;
 
 require './t/test-config.pl';
 
-#use Test::Builder;
-my $Test = Test::Builder->new;
-#$Test->no_plan();
+use Test::More;
 
 # This will find step definitions and feature files in the directory you point
 # it at below
@@ -29,7 +27,4 @@ my $harness = Test::BDD::Cucumber::Harness::TestBuilder->new({});
  
 # For each feature found, execute it, using the Harness to print results
 $executor->execute( $_, $harness ) for @features;
-#done_testing();
-
-#$Test->ok(1);
-$Test->done_testing();
+done_testing();

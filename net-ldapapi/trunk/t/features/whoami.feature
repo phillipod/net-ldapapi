@@ -1,0 +1,21 @@
+Feature: Querying the directory for my identity
+ As a directory consumer
+ I want to ensure that I can retrieve my identity
+ In order to determine my DN when using a non-simple authentication
+
+ Background:
+   Given a usable Net::LDAPapi class
+
+ Scenario: Can query identity with anonymous authentication
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've bound with anonymous authentication to the directory
+   And I've queried the directory for my identity
+   Then the identity result is LDAP_SUCCESS
+   And the identity matches
+
+ Scenario: Can query identity with simple authentication
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've bound with simple authentication to the directory
+   And I've queried the directory for my identity
+   Then the identity result is LDAP_SUCCESS
+   And the identity matches
