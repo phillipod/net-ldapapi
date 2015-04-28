@@ -1,23 +1,23 @@
 our %TestConfig = (
-  'LDAP' => {
-    'Server' => 'localhost',
-    'Port' => '389',
-    'BaseDN' => 'dc=example,dc=com',
-    'DefaultBindType' => 'Simple',
-    'BindTypes' => {
-      'Anonymous' => {
-        'Enabled' => 1,
+  'ldap' => {
+    'server' => 'localhost',
+    'port' => '389',
+    'base_dn' => 'dc=example,dc=com',
+    'default_bind_type' => 'simple',
+    'bind_types' => {
+      'anonymous' => {
+        'enabled' => 0,
       },
-      'Simple' => {
-        'Enabled' => 1,
-        'BindDN' => 'cn=admin,dc=example,dc=com',
-        'BindPW' => 'password'
+      'simple' => {
+        'enabled' => 1,
+        'bind_dn' => 'cn=admin,dc=example,dc=com',
+        'bind_pw' => 'password',
       }
     }
   },
-  'Search' => {
-     'Filter' => "sn=Last Name",
-     "Count" => 1,
+  'search' => {
+     'filter' => "sn=Last Name",
+     "count" => 1,
   }
 );
 

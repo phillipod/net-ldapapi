@@ -30,7 +30,7 @@ Then qr/the identity matches/, sub {
     } elsif (S->{'bind_type'} eq "simple") {
       my ($attr, $value) = split(/:/, S->{'identity_authzid'});
     
-      cmp_ok(lc($value), "eq", lc($TestConfig{'LDAP'}{'BindTypes'}{'Simple'}{'BindDN'}), C->{'scenario'}->{'name'});
+      cmp_ok(lc($value), "eq", lc($TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_dn'}), C->{'scenario'}->{'name'});
     }
 
   }

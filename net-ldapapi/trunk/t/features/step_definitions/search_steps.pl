@@ -12,15 +12,15 @@ When qr/I've searched for records with scope (.+)/, sub {
   my $scope = $1;
   
   S->{'search_result'} = S->{'object'}->search_s(
-    -basedn => $TestConfig{'LDAP'}{'BaseDN'},
+    -basedn => $TestConfig{'ldap'}{'base_dn'},
     -scope => S->{'object'}->$scope,
-    -filter => $TestConfig{'Search'}{'Filter'},
+    -filter => $TestConfig{'search'}{'filter'},
     -attrs => \[],
     -attrsonly => 0);
 };
 
 Then qr/the search count matches/, sub {
-  cmp_ok(S->{'object'}->count_entries, "==", $TestConfig{'Search'}{'Count'}, C->{'scenario'}->{'name'});
+  cmp_ok(S->{'object'}->count_entries, "==", $TestConfig{'search'}{'count'}, C->{'scenario'}->{'name'});
 };
 
 1;

@@ -14,7 +14,7 @@ When qr/I've bound with (.+?) authentication to the directory/, sub {
   S->{'bind_result'} = "skipped";
 
   if ($type eq "default") {
-    $type = lc($TestConfig{'LDAP'}{'DefaultBindType'});
+    $type = lc($TestConfig{'ldap'}{'default_bind_type'});
   }
 
   S->{'bind_type'} = $type;
@@ -22,7 +22,7 @@ When qr/I've bound with (.+?) authentication to the directory/, sub {
   if ($type eq "anonymous") {
   
     SKIP: {
-      skip("anonymous authentication disabled in t/test-config.pl", 1) if $TestConfig{'LDAP'}{'BindTypes'}{'Anonymous'}{'Enabled'} != 1;
+      skip("anonymous authentication disabled in t/test-config.pl", 1) if $TestConfig{'ldap'}{'bind_types'}{'anonymous'}{'enabled'} != 1;
 
       S->{'bind_result'} = S->{'object'}->bind_s();
     }
@@ -30,11 +30,11 @@ When qr/I've bound with (.+?) authentication to the directory/, sub {
   } elsif ($type eq "simple") {
 
     SKIP: {
-      skip("simple authentication disabled in t/test-config.pl", 1) if $TestConfig{'LDAP'}{'BindTypes'}{'Simple'}{'Enabled'} != 1;
+      skip("simple authentication disabled in t/test-config.pl", 1) if $TestConfig{'ldap'}{'bind_types'}{'simple'}{'enabled'} != 1;
       
       S->{'bind_result'} = S->{'object'}->bind_s(
-        -dn => $TestConfig{'LDAP'}{'BindTypes'}{'Simple'}{'BindDN'},
-        -password => $TestConfig{'LDAP'}{'BindTypes'}{'Simple'}{'BindPW'});
+        -dn => $TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_dn'},
+        -password => $TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_pw'});
     }
     
   }
