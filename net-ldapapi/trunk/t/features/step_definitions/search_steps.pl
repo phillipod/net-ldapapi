@@ -8,14 +8,22 @@ use Test::BDD::Cucumber::StepFile;
 
 our %TestConfig = %main::TestConfig;
 
-When qr/I've searched for records with scope (.+)/, sub {
-  my $scope = $1;
+When qr/I've (asynchronously )?searched for records with scope (.+)/, sub {
+  my $async = $1 ? 1 : 0;
+  my $scope = $2;
+
+  my $func = "search_s";
+  if ($async) {
+    $func = "search";
+  }
   
-  S->{'search_result'} = S->{'object'}->search_s(
+  S->{'search_async'} = $async;
+  
+  S->{'search_result'} = S->{'object'}->$func(
     -basedn => $TestConfig{'ldap'}{'base_dn'},
     -scope => S->{'object'}->$scope,
     -filter => $TestConfig{'search'}{'filter'},
-    -attrs => \[],
+    -attrs => \@{['cn']},
     -attrsonly => 0);
 };
 

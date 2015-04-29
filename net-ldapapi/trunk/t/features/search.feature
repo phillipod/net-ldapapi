@@ -12,3 +12,11 @@ Feature: Searching the directory
    And I've searched for records with scope LDAP_SCOPE_SUBTREE
    Then the search result is LDAP_SUCCESS
    And the search count matches
+
+ Scenario: Can search asynchronously
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've asynchronously bound with default authentication to the directory
+   And I've asynchronously searched for records with scope LDAP_SCOPE_SUBTREE
+   Then after waiting for all results, the search result message type is LDAP_RES_SEARCH_RESULT 
+   And the search result is LDAP_SUCCESS
+   And the search count matches
