@@ -21,50 +21,38 @@ Then qr/(after waiting for all results, )?the (.+) result message type is (.+)/,
   my $test_function = $2;
   my $desired_result = $3;
 
-  if (S->{$test_function . '_result'} eq "skipped") {
-    ok(1, C->{'scenario'}->{'name'} . " skipped");
-  } else {
-    if (defined(S->{$test_function . '_result'})) {
+  SKIP: {
+            
+    skip(C->{'scenario'}->{'name'} . " skipped", 1) if S->{$test_function . '_result'} eq "skipped";
 
-      if (S->{$test_function . '_async'}) {
-        S->{$test_function . '_result_id'} = S->{'object'}->result(S->{$test_function . '_result'}, $wait_for_all, 1);
+    isnt( S->{$test_function . '_result'}, undef, "Do we have result from $test_function?");
+  
+    if (is( S->{$test_function . '_async'}, 1, "Was $test_function asynchronous?")) {
+      S->{$test_function . '_result_id'} = S->{'object'}->result(S->{$test_function . '_result'}, $wait_for_all, 1);
 
-        cmp_ok(S->{'object'}->msgtype2str(S->{'object'}->{"status"}), "eq", $desired_result, C->{'scenario'}->{'name'});
-      } else {
-        ok(0, C->{'scenario'}->{'name'});
-      }
-
-    } else {
-      ok(0, C->{'scenario'}->{'name'});
+      is(S->{'object'}->msgtype2str(S->{'object'}->{"status"}), $desired_result, "Does expected result message type match?");  
     }
-  }  
+  }
 };
-
-use Data::Dumper;
 
 Then qr/the (.+) result is (.+)/, sub {
   my $test_function = $1;
   my $desired_result = $2;
-    
-  if (S->{$test_function . '_result'} eq "skipped") {
-    ok(1, C->{'scenario'}->{'name'} . " skipped");
-  } else {
-    if (defined(S->{$test_function . '_result'})) {
+  
+  SKIP: {
+            
+    skip(C->{'scenario'}->{'name'} . " skipped", 1) if S->{$test_function . '_result'} eq "skipped";
+
+    if (isnt( S->{$test_function . '_result'}, undef, "Do we have result from $test_function?")) {
 
       if (S->{$test_function . '_async'}) {
         my $ref = {S->{'object'}->parse_result(S->{$test_function . '_result_id'})};
-#        print STDERR S->{'object'}->errstring . "\n";
-#        print STDERR Dumper($ref);
-#        print STDERR $ref->{'errcode'} . "\n";
-#        print STDERR ldap_err2string($ref->{'errcode'}) . "\n";
-        cmp_ok(ldap_err2string($ref->{'errcode'}), 'eq', ldap_err2string(S->{'object'}->$desired_result), C->{'scenario'}->{'name'});        
-      } else {
-        cmp_ok(ldap_err2string(S->{$test_function . '_result'}), 'eq', ldap_err2string(S->{'object'}->$desired_result), C->{'scenario'}->{'name'});
-      }
 
-    } else {
-      ok(0, C->{'scenario'}->{'name'});
-    }
+        is(ldap_err2string($ref->{'errcode'}), ldap_err2string(S->{'object'}->$desired_result), "Does expected async result code match?");        
+      } else {
+        is(ldap_err2string(S->{$test_function . '_result'}), ldap_err2string(S->{'object'}->$desired_result), "Does expected result code match?");        
+      }
+    }            
   }
 };
 

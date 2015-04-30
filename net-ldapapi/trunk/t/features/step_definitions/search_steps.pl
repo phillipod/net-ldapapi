@@ -28,7 +28,7 @@ When qr/I've (asynchronously )?searched for records with scope (.+)/, sub {
 };
 
 Then qr/the search count matches/, sub {
-  cmp_ok(S->{'object'}->count_entries, "==", $TestConfig{'search'}{'count'}, C->{'scenario'}->{'name'});
+  is(S->{'object'}->count_entries, $TestConfig{'search'}{'count'}, "Does the search count match?");
 };
 
 1;

@@ -19,3 +19,20 @@ Feature: Querying the directory for my identity
    And I've queried the directory for my identity
    Then the identity result is LDAP_SUCCESS
    And the identity matches
+
+ Scenario: Can asynchronously query identity with anonymous authentication
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've asynchronously bound with anonymous authentication to the directory
+   And I've asynchronously queried the directory for my identity
+   Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
+   And the identity result is LDAP_SUCCESS
+   And the identity matches
+
+ Scenario: Can asynchronously query identity with simple authentication
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've asynchronously bound with simple authentication to the directory
+   And I've asynchronously queried the directory for my identity
+   Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
+   And the identity result is LDAP_SUCCESS
+   And the identity matches
+
