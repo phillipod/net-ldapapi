@@ -41,7 +41,9 @@ Then qr/the identity matches/, sub {
     } else {
       $got = S->{'identity_authzid'};
     }
-    
+
+    S->{'identity_got'} = $got;
+        
     if (S->{'bind_type'} eq "anonymous") {
       $expected = "";
     } elsif (S->{'bind_type'} eq "simple") {
