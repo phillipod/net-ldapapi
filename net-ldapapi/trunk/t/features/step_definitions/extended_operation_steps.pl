@@ -33,8 +33,6 @@ When qr/I've (asynchronously )?issued a (.+?) extended operation to the director
   S->{$extended_operation . ' extended operation_result'} = S->{'object'}->$func(%args);
 };
 
-use Data::Dumper;
-
 Then qr/the (.+?) extended operation matches/i, sub {
   my $extended_operation = lc($1);
 

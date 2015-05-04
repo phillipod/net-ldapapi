@@ -29,7 +29,6 @@ When qr/I've (asynchronously )?added a new (entry|container) to the directory/i,
   $args{'-dn'} = sprintf('%s,%s,%s', $TestConfig{'data'}{$type . '_dn'}, $TestConfig{'data'}{'test_container_dn'}, $TestConfig{'ldap'}{'base_dn'});
   $args{'-mod'} = $TestConfig{'data'}{$type . '_attributes'};
  
-  print Dumper(\%args); 
   S->{'new ' . $type . '_result'} = S->{'object'}->$func(%args);
 };
 

@@ -39,8 +39,9 @@ our %TestConfig = (
     'entry_dn' => 'cn=Test - Add Entry',
   },
   'rename' => {
-    'old_dn' => 'cn=Test - Add Entry',
-    'new_dn' => 'cn=Test - Add Entry,ou=Test - Add Container'
+    'dn' => 'cn=Test - Add Entry',
+    'new_rdn' => 'cn=Test - Add Entry',
+    'new_super' => 'ou=Test - Add Container'
   }
 );
 
