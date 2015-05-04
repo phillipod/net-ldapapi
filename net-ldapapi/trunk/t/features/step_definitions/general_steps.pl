@@ -2,7 +2,8 @@
 
 use strict;
 use warnings;
-  
+
+use Net::LDAPapi;
 use Test::More;
 use Test::BDD::Cucumber::StepFile;
 
@@ -11,9 +12,45 @@ our %TestConfig = %main::TestConfig;
 Given qr/a usable (\S+) class/, sub {  use_ok($1); };
 Given qr/a Net::LDAPapi object that has been connected to the LDAP server/, sub {
   my $object = Net::LDAPapi->new($TestConfig{'ldap'}{'server'}, $TestConfig{'ldap'}{'port'});
-  ok( $object, "Net::LDAPapi object created");
+  ok( $object, 'Net::LDAPapi object created');
   
   S->{'object'} = $object;
+};
+
+When qr/a test container has been created/, sub { 
+  my %args = ();
+  
+  $args{'-dn'} = sprintf('%s,%s', $TestConfig{'data'}{'test_container_dn'}, $TestConfig{'ldap'}{'base_dn'});
+  $args{'-mod'} = $TestConfig{'data'}{'test_container_attributes'};
+ 
+  my $status = S->{'object'}->add_s(%args);
+  
+  is(ldap_err2string($status), ldap_err2string(LDAP_SUCCESS), 'Was adding the test container successful?');
+};
+
+Then qr/the test container has been deleted/, sub {
+  my %search_args = ();
+  my @delete_dns = ();
+  
+  $search_args{'-basedn'} = sprintf('%s,%s', $TestConfig{'data'}{'test_container_dn'}, $TestConfig{'ldap'}{'base_dn'});
+  $search_args{'-scope'} = LDAP_SCOPE_SUBTREE;
+  $search_args{'-filter'} = '(objectClass=*)';
+  $search_args{'-attrs'} = ['objectClass'];
+  
+  my $search_status = S->{'object'}->search_s(%search_args);
+
+  is(ldap_err2string($search_status), ldap_err2string(LDAP_SUCCESS), 'Was searching for the test container to delete successful?');
+  
+  while( my $ent = S->{'object'}->result_entry) {
+    push(@delete_dns, S->{'object'}->get_dn())
+  }
+
+  foreach my $dn (sort { length($b) <=> length($a) } @delete_dns) {
+    my %delete_args = ('-dn' => $dn);
+
+    my $status = S->{'object'}->delete_s(%delete_args);
+    is(ldap_err2string($status), ldap_err2string(LDAP_SUCCESS), 'Was deleting test container contents "' . $dn . '" successful?');
+  }
 };
 
 Then qr/(after waiting for all results, )?the (.+) result message type is (.+)/, sub {
@@ -32,6 +69,7 @@ Then qr/(after waiting for all results, )?the (.+) result message type is (.+)/,
 
       is(S->{'object'}->msgtype2str(S->{'object'}->{"status"}), $desired_result, "Does expected result message type match?");  
     }
+    
   }
 };
 
