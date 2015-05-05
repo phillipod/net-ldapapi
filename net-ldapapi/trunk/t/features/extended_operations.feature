@@ -33,7 +33,7 @@ Feature: Executing extended operations against the directory
    And I've asynchronously issued a whoami extended operation to the directory
    Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
    And the identity result is LDAP_SUCCESS
-   Then after waiting for all results, the whoami extended operation result message type is LDAP_RES_EXTENDED
+   And after waiting for all results, the whoami extended operation result message type is LDAP_RES_EXTENDED
    And the whoami extended operation result is LDAP_SUCCESS
    And the identity matches
    And the whoami extended operation matches
@@ -45,7 +45,7 @@ Feature: Executing extended operations against the directory
    And I've asynchronously issued a whoami extended operation to the directory
    Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
    And the identity result is LDAP_SUCCESS
-   Then after waiting for all results, the whoami extended operation result message type is LDAP_RES_EXTENDED
+   And after waiting for all results, the whoami extended operation result message type is LDAP_RES_EXTENDED
    And the whoami extended operation result is LDAP_SUCCESS
    And the identity matches
    And the whoami extended operation matches
