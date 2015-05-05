@@ -13,7 +13,7 @@ Feature: Updating attributes of entries within the directory
    And I've added a new entry to the directory
    And I've added a new attribute to the new entry
    Then the new entry result is LDAP_SUCCESS
-   And the added attribute result is LDAP_SUCCESS
+   And the new attribute result is LDAP_SUCCESS
    And the test container has been deleted
 
  Scenario: Can modify an attribute on an entry within the directory
@@ -24,7 +24,7 @@ Feature: Updating attributes of entries within the directory
    And I've added a new attribute to the new entry
    And I've modified the new attribute on the new entry
    Then the new entry result is LDAP_SUCCESS
-   And the added attribute result is LDAP_SUCCESS
+   And the new attribute result is LDAP_SUCCESS
    And the modified attribute result is LDAP_SUCCESS
    And the test container has been deleted
 
@@ -36,7 +36,7 @@ Feature: Updating attributes of entries within the directory
    And I've added a new attribute to the new entry
    And I've removed the new attribute from the new entry
    Then the new entry result is LDAP_SUCCESS
-   And the added attribute result is LDAP_SUCCESS
+   And the new attribute result is LDAP_SUCCESS
    And the removed attribute result is LDAP_SUCCESS
    And the test container has been deleted
 
@@ -48,8 +48,8 @@ Feature: Updating attributes of entries within the directory
    And I've asynchronously added a new attribute to the new entry
    Then after waiting for all results, the new entry result message type is LDAP_RES_ADD
    And the new entry result is LDAP_SUCCESS
-   And after waiting for all results, the added attribute result message type is LDAP_RES_MODIFY
-   And the added attribute result is LDAP_SUCCESS
+   And after waiting for all results, the new attribute result message type is LDAP_RES_MODIFY
+   And the new attribute result is LDAP_SUCCESS
    And the test container has been deleted
 
  Scenario: Can asynchronously modify an attribute on an entry within the directory
@@ -61,10 +61,10 @@ Feature: Updating attributes of entries within the directory
    And I've asynchronously modified the new attribute on the new entry
    Then after waiting for all results, the new entry result message type is LDAP_RES_ADD
    And the new entry result is LDAP_SUCCESS
-   And after waiting for all results, the added attribute result message type is LDAP_RES_MODIFY
-   And the added attribute result is LDAP_SUCCESS
+   And after waiting for all results, the new attribute result message type is LDAP_RES_MODIFY
+   And the new attribute result is LDAP_SUCCESS
    And after waiting for all results, the modified attribute result message type is LDAP_RES_MODIFY
-   And the removed attribute result is LDAP_SUCCESS
+   And the modified attribute result is LDAP_SUCCESS
    And the test container has been deleted
 
  Scenario: Can asynchronously remove an attribute on an entry within the directory
@@ -76,8 +76,8 @@ Feature: Updating attributes of entries within the directory
    And I've asynchronously removed the new attribute from the new entry
    Then after waiting for all results, the new entry result message type is LDAP_RES_ADD
    And the new entry result is LDAP_SUCCESS
-   And after waiting for all results, the added attribute result message type is LDAP_RES_MODIFY
-   And the added attribute result is LDAP_SUCCESS
+   And after waiting for all results, the new attribute result message type is LDAP_RES_MODIFY
+   And the new attribute result is LDAP_SUCCESS
    And after waiting for all results, the removed attribute result message type is LDAP_RES_MODIFY
    And the removed attribute result is LDAP_SUCCESS
    And the test container has been deleted

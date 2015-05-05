@@ -34,7 +34,7 @@ our %TestConfig = (
       'sn' => 'Entry',
       'givenName' => 'Test - Add',
     },
-    'test_container_dn' => 'ou=Test',
+    'test_container_dn' => 'ou=Test Container',
     'container_dn' => 'ou=Test - Add Container',
     'entry_dn' => 'cn=Test - Add Entry',
   },
@@ -42,7 +42,18 @@ our %TestConfig = (
     'dn' => 'cn=Test - Add Entry',
     'new_rdn' => 'cn=Test - Add Entry',
     'new_super' => 'ou=Test - Add Container'
-  }
+  },
+  'modify' => {
+    'new_attribute' => {
+      'title' => { 'a' => ['New Test Title'] }
+    },
+    'modify_attribute' => {
+      'title' => { 'r' => ['Modified Test Title'] }
+    },
+    'remove_attribute' => {
+      'title' => ''
+    },
+  },
 );
 
 if ( -e $ENV{'HOME'} . '/.net-ldapapi-test-config.conf') {
