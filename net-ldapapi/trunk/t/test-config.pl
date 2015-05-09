@@ -54,6 +54,10 @@ our %TestConfig = (
       'title' => ''
     },
   },
+  'syncrepl' => {
+    'enabled' => 1,
+    'cookie_dir' => '/tmp/'  
+  },
 );
 
 if ( -e $ENV{'HOME'} . '/.net-ldapapi-test-config.conf') {

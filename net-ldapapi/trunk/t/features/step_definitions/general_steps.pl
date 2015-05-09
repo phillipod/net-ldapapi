@@ -40,9 +40,9 @@ Then qr/the test container has been deleted/, sub {
   my $search_status = S->{'object'}->search_s(%search_args);
 
   is(ldap_err2string($search_status), ldap_err2string(LDAP_SUCCESS), 'Was searching for the test container to delete successful?');
-  
+
   while( my $ent = S->{'object'}->result_entry) {
-    push(@delete_dns, S->{'object'}->get_dn())
+    push(@delete_dns, S->{'object'}->get_dn());
   }
 
   foreach my $dn (sort { length($b) <=> length($a) } @delete_dns) {
