@@ -58,6 +58,25 @@ our %TestConfig = (
     'enabled' => 1,
     'cookie_dir' => '/tmp/'  
   },
+  'server_controls' => {
+    'sss' => [
+      {
+        'attributeType' => 'sn', 
+        'orderingRule' => '2.5.13.3', 
+        'reverseOrder' => 1
+      },
+    ],
+    'vlv' => {
+      'beforeCount' => 1, 
+      'afterCount' => 3, 
+      'target' => { 
+        'byOffset' => { 
+          'offset' => 1, 
+          'contentCount' => 0 
+        } 
+      }  
+    },
+  },
 );
 
 if ( -e $ENV{'HOME'} . '/.net-ldapapi-test-config.conf') {

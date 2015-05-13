@@ -8,23 +8,25 @@ use Test::BDD::Cucumber::StepFile;
 
 our %TestConfig = %main::TestConfig;
 
-When qr/I've (asynchronously )?searched for records with scope (.+)/, sub {
+When qr/I've (asynchronously )?searched for records with scope ([^, ]+)(?:, with server control(?:s)? (.+((?:(,|and) .+)*)))?/, sub {
   my $async = $1 ? 1 : 0;
   my $scope = $2;
-
+  my @server_ctrls = $3 ? map { S->{'server_controls'}{$_} } split(/(?:,|and)\s*/, $3) : ();
+  
   my $func = "search_s";
   if ($async) {
     $func = "search";
   }
   
   S->{'search_async'} = $async;
-  
+    
   S->{'search_result'} = S->{'object'}->$func(
     -basedn => $TestConfig{'ldap'}{'base_dn'},
     -scope => S->{'object'}->$scope,
     -filter => $TestConfig{'search'}{'filter'},
     -attrs => \@{['cn']},
-    -attrsonly => 0);
+    -attrsonly => 0,
+    -sctrls => @server_ctrls);
 };
 
 Then qr/the search count matches/, sub {
@@ -56,11 +58,16 @@ Then qr/using (.+) for each entry returned the dn and all attributes using (.+?)
   };
  
   my $entry_tests = sub {
-    isnt(S->{'object'}->get_dn(), "", "Is the dn for the entry not empty?");    
+    isnt(S->{'object'}->get_dn(), "", "Is the dn for the entry empty?");    
   };
   
   if ($entry_iterate_mode eq "next_entry") {
-    for (my $ent = S->{'object'}->first_entry; $ent; $ent = S->{'object'}->next_entry) {
+    my $ent = S->{'object'}->first_entry;
+    
+    my %ent_result = S->{'object'}->parse_result();
+    S->{'cache'}{'serverctrls'} = $ent_result{'serverctrls'};
+        
+    for (; $ent; $ent = S->{'object'}->next_entry) {
       $entry_tests->($ent);
         
       $attribute_block->($ent);
