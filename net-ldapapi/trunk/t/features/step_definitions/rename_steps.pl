@@ -30,7 +30,6 @@ When qr/I've (asynchronously )?moved the new entry to the new container/i, sub {
   $args{'-newrdn'} = $TestConfig{'rename'}{'new_rdn'};
  
   S->{'rename entry_result'} = S->{'object'}->$func(%args);
-  print "rename_entry_result: " . S->{'rename entry_result'} . " " . S->{'object'}->errstring () . "\n";
 };
 
 1;
