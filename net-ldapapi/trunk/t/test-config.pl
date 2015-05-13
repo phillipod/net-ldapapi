@@ -67,6 +67,10 @@ our %TestConfig = (
       },
     ],
   },
+  'compare' => {
+    'entry_attribute' => 'cn', 
+    'compare_attribute' => 'ou'  
+  }
 );
 
 if ( -e $ENV{'HOME'} . '/.net-ldapapi-test-config.conf') {
