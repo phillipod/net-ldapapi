@@ -7,12 +7,14 @@ use Test::More;
 use Test::BDD::Cucumber::StepFile;
 
 our %TestConfig = %main::TestConfig;
+use Data::Dumper;
 
 When qr/I've (asynchronously )?searched for records with scope ([^, ]+)(?:, with server control(?:s)? (.+((?:(,|and) .+)*)))?(?:, with timeout (\d+))?/, sub {
   my $async = $1 ? 1 : 0;
   my $scope = $2;
   my $timeout = $6;
-  my @server_ctrls = $3 ? map { S->{'server_controls'}{$_} } split(/(?:,|and)\s*/, $3) : ();
+
+  my @server_ctrls = $3 ? map { S->{'server_controls'}{$_} } split(/(?:,|and)\s*/, $3) : undef;
 
   my $func = "search_s";
   if ($async) {
@@ -23,18 +25,14 @@ When qr/I've (asynchronously )?searched for records with scope ([^, ]+)(?:, with
 
   my %args = ();
   
-  $args{'-basedn'} = $TestConfig{'ldap'}{'base_dn'};
-  $args{'-scope'} = S->{'object'}->$scope;
-  $args{'-filter'} = $TestConfig{'search'}{'filter'};
-  $args{'-attrs'} = \@{['cn']};
-  $args{'-attrsonly'} = 0;
-  $args{'-sctrls'} = @server_ctrls;
-
-  if (defined($timeout) && $timeout ne "") {
-    $args{'-timeout'} = $timeout;
-  }
-    
-  S->{'search_result'} = S->{'object'}->$func(%args);
+  S->{'search_result'} = S->{'object'}->$func(
+    -basedn => $TestConfig{'ldap'}{'base_dn'},
+    -scope => S->{'object'}->$scope,
+    -filter => $TestConfig{'search'}{'filter'},
+    -attrs => \@{['cn']},
+    -attrsonly => 0,
+    -sctrls => @server_ctrls,
+    -timeout => $timeout);
 };
 
 Then qr/the search count matches/, sub {
