@@ -36,7 +36,6 @@ Feature: Searching the directory
    And the search result is LDAP_SUCCESS
    And the search count matches
 
-
  Scenario: Can find objects that exist with the directory and iterate them with next_entry and next_attribute
    Given a Net::LDAPapi object that has been connected to the LDAP server
    When I've bound with default authentication to the directory
@@ -69,4 +68,10 @@ Feature: Searching the directory
    And the search count matches
    And using result_entry for each entry returned the dn and all attributes using entry_attribute are valid
  
-
+  Scenario: Can find objects that exist with the directory and read them all at once
+   Given a Net::LDAPapi object that has been connected to the LDAP server
+   When I've bound with default authentication to the directory
+   And I've searched for records with scope LDAP_SCOPE_SUBTREE
+   Then the search result is LDAP_SUCCESS
+   And the search count matches
+   And using get_all_entries for each entry returned the dn and all attributes are valid

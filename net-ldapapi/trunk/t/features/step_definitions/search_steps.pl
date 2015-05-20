@@ -39,6 +39,21 @@ Then qr/the search count matches/, sub {
   is(S->{'object'}->count_entries, $TestConfig{'search'}{'count'}, "Does the search count match?");
 };
 
+Then qr/using get_all_entries for each entry returned the dn and all attributes are valid/, sub {
+  my $entries = S->{'object'}->get_all_entries();
+
+  foreach my $entry_dn (keys %{$entries}) {
+    print STDERR "$entry_dn\n";
+    isnt($entry_dn, "", "Is the dn for the entry empty?");
+    
+    foreach my $attribute (keys %{$entries->{$entry_dn}}) {
+      my @vals = $entries->{$entry_dn}{$attribute};
+      
+      ok(($#vals >= 0), "Are values returned?");
+    }
+  }
+};
+
 Then qr/using (.+) for each entry returned the dn and all attributes using (.+?) are valid/, sub {
   my $entry_iterate_mode = lc($1);
   my $attribute_iterate_mode = lc($2);
@@ -47,7 +62,7 @@ Then qr/using (.+) for each entry returned the dn and all attributes using (.+?)
     my $attr = shift;
     my @vals = S->{'object'}->get_values($attr);
 
-    ok(($#vals >= 0), "Are values returned?");    
+    ok(($#vals >= 0), "Are values returned?");
     
   };
   
