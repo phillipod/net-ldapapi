@@ -18,11 +18,11 @@ When qr/I've (asynchronously )?added a new (entry|container) to the directory/i,
 
   return if S->{'bind_result'} eq 'skipped';
 
-  my $func = 'add_s';
+  my $func = 'add_ext_s';
   my %args = ();
   
   if ($async) {
-    $func = 'add';
+    $func = 'add_ext';
   }
   S->{'new ' . $type . '_async'} = $async;
   

@@ -16,9 +16,9 @@ When qr/I've (asynchronously )?searched for records with scope ([^, ]+)(?:, with
 
   my @server_ctrls = $3 ? map { S->{'server_controls'}{$_} } split(/(?:,|and)\s*/, $3) : undef;
 
-  my $func = "search_s";
+  my $func = "search_ext_s";
   if ($async) {
-    $func = "search";
+    $func = "search_ext";
   }
   
   S->{'search_async'} = $async;

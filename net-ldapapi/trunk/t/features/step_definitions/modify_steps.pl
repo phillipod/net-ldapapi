@@ -17,11 +17,11 @@ When qr/I've (asynchronously )?added a new attribute to the new entry/i, sub {
 
   return if S->{'bind_result'} eq 'skipped';
 
-  my $func = 'modify_s';
+  my $func = 'modify_ext_s';
   my %args = ();
   
   if ($async) {
-    $func = 'modify';
+    $func = 'modify_ext';
   }
   S->{'new attribute_async'} = $async;
   

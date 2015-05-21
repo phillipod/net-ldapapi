@@ -18,11 +18,11 @@ When qr/I've (asynchronously )?compared to an attribute on the new (entry|contai
 
   return if S->{'bind_result'} eq 'skipped';
 
-  my $func = 'compare_s';
+  my $func = 'compare_ext_s';
   my %args = ();
   
   if ($async) {
-    $func = 'compare';
+    $func = 'compare_ext';
   }
   S->{'new ' . $type . ' comparison_async'} = $async;
   
