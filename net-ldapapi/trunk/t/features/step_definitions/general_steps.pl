@@ -10,8 +10,15 @@ use Test::BDD::Cucumber::StepFile;
 our %TestConfig = %main::TestConfig;
 
 Given qr/a usable (\S+) class/, sub {  use_ok($1); };
-Given qr/a Net::LDAPapi object that has been connected to the LDAP server/, sub {
-  my $object = Net::LDAPapi->new($TestConfig{'ldap'}{'server'}, $TestConfig{'ldap'}{'port'});
+Given qr/a Net::LDAPapi object that has been connected to the (.+?)?\s?LDAP server/, sub {
+  my $type = $1;
+ 
+  if (!defined($type)) {
+    $type = $TestConfig{'ldap'}{'default_server'};
+  }
+  
+  my $object = Net::LDAPapi->new(%{$TestConfig{'ldap'}{'server'}{$type}});
+
   ok( $object, 'Net::LDAPapi object created');
   
   S->{'object'} = $object;

@@ -51,10 +51,14 @@ Then qr/the identity matches/, sub {
       
       $got = $value;
       $expected = $TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_dn'};
+    } elsif (S->{'bind_type'} eq "sasl") {
+      my ($attr, $value) = split(/:/, $got);
+      
+      $got = $value;
+      $expected = $TestConfig{'ldap'}{'bind_types'}{'sasl'}{'identity'};
     }
     
-    is(lc($got), lc($expected), "Does expected identity match received identity?");
-    
+    is(lc($got), lc($expected), "Does expected identity match received identity?");    
   }
 };
 

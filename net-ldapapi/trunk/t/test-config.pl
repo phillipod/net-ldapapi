@@ -1,9 +1,16 @@
 our %TestConfig = (
   'ldap' => {
-    'server' => 'localhost',
-    'port' => '389',
+    'server' => {
+      'tcp' => {
+        '-host' => 'localhost',
+        '-port' => 389,
+      },
+      'ldapi' => {
+        '-url' => 'ldapi:///',
+        '-debug' => 1
+      }
+    },
     'base_dn' => 'dc=example,dc=com',
-    'default_bind_type' => 'simple',
     'bind_types' => {
       'anonymous' => {
         'enabled' => 1,
@@ -12,8 +19,17 @@ our %TestConfig = (
         'enabled' => 1,
         'bind_dn' => 'cn=admin,dc=example,dc=com',
         'bind_pw' => 'password',
+      },
+      'sasl' => {
+        'enabled' => 1,
+        'sasl_parms' => {
+          '-mech' => 'EXTERNAL',
+        },
+        'identity' => "gidNumber=" . $< . "+uidNumber=" . (split(/ /, "$("))[0] . ",cn=peercred,cn=external,cn=auth"
       }
-    }
+    },
+    'default_server' => 'tcp',
+    'default_bind_type' => 'simple',
   },
   'search' => {
      'filter' => "sn=Last",

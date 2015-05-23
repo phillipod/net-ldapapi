@@ -2,7 +2,8 @@
 
 use strict;
 use warnings;
-  
+
+#use Net::LDAPapi;
 use Test::More;
 use Test::BDD::Cucumber::StepFile;
 
@@ -35,6 +36,14 @@ When qr/I've (asynchronously )?bound with (.+?) authentication to the directory/
     %args = (
         -dn => $TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_dn'},
         -password => $TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_pw'}
+    );
+  } elsif ($type eq "sasl") {
+    return if $TestConfig{'ldap'}{'bind_types'}{'sasl'}{'enabled'} != 1;
+    
+    S->{'object'}->sasl_parms(%{$TestConfig{'ldap'}{'bind_types'}{'sasl'}{'sasl_parms'}});
+
+    %args = (
+        -type => S->{'object'}->LDAP_AUTH_SASL
     );
   }
     

@@ -43,7 +43,6 @@ Then qr/using get_all_entries for each entry returned the dn and all attributes 
   my $entries = S->{'object'}->get_all_entries();
 
   foreach my $entry_dn (keys %{$entries}) {
-    print STDERR "$entry_dn\n";
     isnt($entry_dn, "", "Is the dn for the entry empty?");
     
     foreach my $attribute (keys %{$entries->{$entry_dn}}) {
