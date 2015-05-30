@@ -50,12 +50,12 @@ Feature: Querying the directory for my identity
    And the identity result is LDAP_SUCCESS
    And the identity matches
 
- Scenario: Can asynchronously query identity with sasl authentication
-   Given a Net::LDAPapi object that has been connected to the ldapi LDAP server
-   When I've asynchronously bound with sasl authentication to the directory
-   And I've asynchronously queried the directory for my identity
-   Then the bind result message type is LDAP_RES_BIND
-   And the bind result is LDAP_SUCCESS
-   And after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
-   And the identity result is LDAP_SUCCESS
-   And the identity matches
+# Scenario: Can asynchronously query identity with sasl authentication
+#   Given a Net::LDAPapi object that has been connected to the ldapi LDAP server
+#   When I've asynchronously bound with sasl authentication to the directory
+#   And I've asynchronously queried the directory for my identity
+#   Then the bind result message type is LDAP_RES_BIND
+#   And the bind result is LDAP_SUCCESS
+#   And after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
+#   And the identity result is LDAP_SUCCESS
+#   And the identity matches

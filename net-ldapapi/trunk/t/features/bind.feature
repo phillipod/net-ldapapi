@@ -33,8 +33,8 @@ Feature: Binding to the directory
    Then the bind result message type is LDAP_RES_BIND
    And the bind result is LDAP_SUCCESS
 
- Scenario: Can asynchronously bind with sasl authentication
-   Given a Net::LDAPapi object that has been connected to the ldapi LDAP server
-   When I've asynchronously bound with sasl authentication to the directory
-   Then the bind result message type is LDAP_RES_BIND
-   And the bind result is LDAP_SUCCESS
+# Scenario: Can asynchronously bind with sasl authentication
+#   Given a Net::LDAPapi object that has been connected to the ldapi LDAP server
+#   When I've asynchronously bound with sasl authentication to the directory
+#   Then the bind result message type is LDAP_RES_BIND
+#   And the bind result is LDAP_SUCCESS
