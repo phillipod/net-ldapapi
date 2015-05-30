@@ -25,8 +25,8 @@ When qr/I've started listening for changes within the directory/i, sub {
   $args{'-filter'} = '(objectClass=*)';
   $args{'-cookie'} = $TestConfig{'syncrepl'}{'cookie_dir'} . "syncrepl.$$.cookie";
   
-  open(COOKIE, ">" . $args{'-cookie'});
-  close(COOKIE);
+#  open(COOKIE, ">" . $args{'-cookie'});
+#  close(COOKIE);
     
   S->{'listen changes_result'} = S->{'object'}->$func(%args);
   S->{'object'}->next_changed_entries(S->{'listen changes_result'}, 0, 1);

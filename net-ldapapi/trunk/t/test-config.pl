@@ -1,3 +1,11 @@
+# Developer tests require:
+#   Test::More
+#   Test::BDD::Cucumber
+our $RunDeveloperTests = 0;
+
+# Default config. 
+# If you're a developer of Net::LDAPapi or are likely to have multiple trees that share common test config,
+# then you should override in ~/.net-ldapapi-test-config.conf (See below)
 our %TestConfig = (
   'ldap' => {
     'server' => {
@@ -89,8 +97,23 @@ our %TestConfig = (
   }
 );
 
+
+# Allow overrides from outside the source tree.
+# This is a standard Perl file. Example below.
 if ( -e $ENV{'HOME'} . '/.net-ldapapi-test-config.conf') {
   require $ENV{'HOME'} . '/.net-ldapapi-test-config.conf';
 }
+
+1;
+__END__
+
+$RunDeveloperTests = 1;
+
+$TestConfig{'ldap'}{'base_dn'} = "o=Test Data,c=NZ";
+$TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_dn'} = "cn=admin,o=Test Data,c=NZ";
+$TestConfig{'ldap'}{'bind_types'}{'simple'}{'bind_pw'} = "password";
+
+$TestConfig{'search'}{'filter'} = "sn=O'Donnell";
+
 
 1;

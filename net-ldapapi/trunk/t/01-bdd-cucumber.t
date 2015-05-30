@@ -1,11 +1,18 @@
 #!/usr/bin/perl
  
+BEGIN {
+  require './t/test-config.pl';
+  if (!$RunDeveloperTests) {
+    print "1..0 # Skipped: Developer tests are not enabled";
+  
+    exit;
+  }   
+};
+
+
 use strict;
 use warnings;
 use Devel::Cover;
-
-require './t/test-config.pl';
-
 use Test::More;
 
 # This will find step definitions and feature files in the directory you point
