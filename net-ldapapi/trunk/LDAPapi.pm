@@ -34,7 +34,7 @@ require AutoLoader;
        ldap_get_all_entries ldap_multisort_entries
        ldap_is_ldap_url ldap_url_parse ldap_url_search ldap_url_search_s
        ldap_url_search_st ber_free ldap_init ldap_initialize ldap_start_tls_s
-       ldap_sasl_interactive_bind_s
+       ldap_sasl_interactive_bind ldap_sasl_interactive_bind_s
        ldap_create_control ldap_control_berval
        LDAP_RES_BIND
        LDAP_RES_SEARCH_ENTRY
@@ -448,40 +448,49 @@ sub add_ext_s
     return $self->add_s(@args);
 } # end of add_ext_s
 
-
 sub bind
 {
-    my ($self,@args) = @_;
+    my ($self, @args) = @_;
 
-    my ($msgid, $sctrls, $cctrls, $status);
+    my ($msgid, $servercredp, $sctrls, $cctrls, $status);
 
-    my ($dn, $pass, $authtype, $serverctrls, $clientctrls) =
-        $self->rearrange(['DN', 'PASSWORD', 'TYPE', 'SCTRLS', 'CCTRLS'],@args);
+    my ($dn, $pass, $authtype, $serverctrls, $clientctrls, $message, $rmech) =
+        $self->rearrange(['DN', 'PASSWORD', 'TYPE', 'SCTRLS', 'CCTRLS', 'MESSAGE', 'RMECH'], @args);
 
     $dn       = "" unless $dn;
     $pass     = "" unless $pass;
+    $sctrls   = 0 unless $sctrls;
+    $cctrls   = 0 unless $cctrls;
+    
     $authtype = $authtype || $self->LDAP_AUTH_SIMPLE;
-
-    croak("bind supports only LDAP_AUTH_SIMPLE auth type")
-        unless $authtype == $self->LDAP_AUTH_SIMPLE;
 
     $sctrls = $self->create_controls_array(@$serverctrls) if $serverctrls;
     $cctrls = $self->create_controls_array(@$clientctrls) if $clientctrls;
 
-    $status = ldap_sasl_bind($self->{"ld"}, $dn,     $pass,
-                             $sctrls,       $cctrls, $msgid);
-
+    if ($authtype == $self->LDAP_AUTH_SASL) {
+        $status =
+            ldap_sasl_interactive_bind($self->{"ld"}, $dn, $pass,
+                                         $sctrls, $cctrls, $self->{"saslmech"},
+                                         $self->{"saslrealm"},
+                                         $self->{"saslauthzid"},
+                                         $self->{"saslsecprops"},
+                                         $self->{"saslflags"},
+                                         $message, $$rmech, $msgid);
+    } else {
+        $status = ldap_sasl_bind($self->{"ld"}, $dn,     $pass, 
+                                 $sctrls,       $cctrls, $msgid);
+    }
+    
     ldap_controls_array_free($sctrls) if $sctrls;
     ldap_controls_array_free($cctrls) if $cctrls;
 
     $self->errorize($status);
-    if( $status != $self->LDAP_SUCCESS ) {
+    if( $status != $self->LDAP_SUCCESS && $status != 14) {
         return undef;
     }
 
     return $msgid;
 } # end of bind
-
 
 sub bind_s
 {
@@ -2126,6 +2135,7 @@ sub errorize {
     my ($errdn, $extramsg);
 
     if ($status != $self->LDAP_SUCCESS) {
+        $self->{"lastrc"} = $status;
         $self->{"errno"}    = ldap_get_lderrno($self->{"ld"}, $errdn, $extramsg);
         $self->{"extramsg"} = $extramsg;
 

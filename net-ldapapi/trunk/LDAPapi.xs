@@ -545,6 +545,36 @@ ldap_add_ext_s(ld,dn,ldap_change_ref,sctrls,cctrls)
        Safefree(ldap_change_ref);
 
 int
+ldap_sasl_interactive_bind(ld, who, passwd, serverctrls, clientctrls, mech, realm, authzid, props, flags, message, rmechp, msgidp)
+    LDAP *         ld
+    LDAP_CHAR *    who
+    LDAP_CHAR *    passwd
+    LDAPControl ** serverctrls
+    LDAPControl ** clientctrls
+    LDAP_CHAR *    mech
+    LDAP_CHAR *    realm
+    LDAP_CHAR *    authzid
+    char *    props
+    unsigned       flags
+    LDAPMessage *  message
+    LDAP_CHAR **   rmechp
+    int            msgidp = NO_INIT
+    CODE:
+    {
+        bictx ctx = {who, passwd, realm, authzid};
+        if (props)
+            ldap_set_option(ld, LDAP_OPT_X_SASL_SECPROPS, props);
+
+        RETVAL = ldap_sasl_interactive_bind( ld, NULL, mech, serverctrls, clientctrls,
+            flags, ldap_b2_interact, &ctx, message, (const char **) &rmechp, &msgidp );
+    }
+    OUTPUT:
+    RETVAL
+    rmechp
+    msgidp
+
+
+int
 ldap_sasl_bind(ld, dn, passwd, serverctrls, clientctrls, msgidp)
     LDAP *          ld
     LDAP_CHAR *     dn
