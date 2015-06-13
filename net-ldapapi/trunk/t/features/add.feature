@@ -22,4 +22,3 @@ Feature: Adding entries to the directory
    Then after waiting for all results, the new entry result message type is LDAP_RES_ADD
    And the new entry result is LDAP_SUCCESS
    And the test container has been deleted
- 

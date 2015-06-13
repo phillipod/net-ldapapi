@@ -19,4 +19,3 @@ Feature: Listening for changes within the directory with syncrepl
    And the delete entry result is LDAP_SUCCESS
    And the changes were successfully notified
    And the test container has been deleted
-
