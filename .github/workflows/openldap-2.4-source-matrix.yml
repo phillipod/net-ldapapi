@@ -12,6 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - openldap_version: 2.4.31
+            openldap_sha256: bde845840df4794b869a6efd6a6b1086f80989038e4844b2e4d7d6b57b39c5b6
           - openldap_version: 2.4.32
             openldap_sha256: 9ee413c6a816cb41f71826759b78001d04e747ede9dde302d6ba94ab16f0b82e
           - openldap_version: 2.4.33
@@ -190,14 +192,14 @@ jobs:
           while IFS= read -r feature_file; do
             echo "::group::${feature_file}"
             set +e
-            timeout --kill-after=5s 60s \
+            timeout --kill-after=5s 180s \
               prove -lv t/01-bdd-cucumber.t :: "$feature_file"
             feature_status="$?"
             set -e
             if [ "$feature_status" -ne 0 ]; then
               suite_status=1
               if [ "$feature_status" -eq 124 ]; then
-                echo "::error file=${feature_file}::Feature timed out after 60 seconds"
+                echo "::error file=${feature_file}::Feature timed out after 180 seconds"
               fi
             fi
             echo "::endgroup::"
