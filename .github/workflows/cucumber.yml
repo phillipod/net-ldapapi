@@ -91,7 +91,8 @@ jobs:
               slapd
           fi
 
-          slapd -VV 2>&1 | tee /tmp/slapd-version.txt
+          slapd -VV > /tmp/slapd-version.txt 2>&1 || true
+          cat /tmp/slapd-version.txt
           grep -F "$EXPECTED_OPENLDAP" /tmp/slapd-version.txt
 
           multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
