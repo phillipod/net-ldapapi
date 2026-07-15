@@ -1,0 +1,344 @@
+name: OpenLDAP nightly source compatibility
+
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  cucumber:
+    name: OpenLDAP ${{ matrix.openldap.label }} (source on Debian Trixie)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        openldap:
+          - label: 2.5.20
+            cache_id: 2.5.20
+            source: release
+            version: 2.5.20
+            sha256: 19a97f5fb459c8f7700566b195371f39acbf226f97e10181b734559f8c61081c
+          - label: 2.6.13 LTS
+            cache_id: 2.6.13
+            source: release
+            version: 2.6.13
+            sha256: d693b49517a42efb85a1a364a310aed16a53d428d1b46c0d31ef3fba78fcb656
+          - label: master
+            cache_id: master
+            source: development
+            version: master
+            sha256: none
+
+    steps:
+      - name: Check out Net::LDAPapi
+        uses: actions/checkout@v4
+
+      - name: Resolve OpenLDAP source revision
+        id: openldap-source
+        env:
+          OPENLDAP_SOURCE: ${{ matrix.openldap.source }}
+          OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+          OPENLDAP_SHA256: ${{ matrix.openldap.sha256 }}
+        run: |
+          if [ "$OPENLDAP_SOURCE" = "release" ]; then
+            revision="$OPENLDAP_SHA256"
+          else
+            revision="$(git ls-remote \
+              https://github.com/openldap/openldap.git \
+              refs/heads/master | awk 'NR == 1 { print $1 }')"
+            test -n "$revision"
+          fi
+
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "OpenLDAP source revision: $revision"
+
+      - name: Restore OpenLDAP source build
+        id: restore-openldap
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/openldap/nightly/${{ matrix.openldap.cache_id }}
+          key: openldap-nightly-source-${{ runner.os }}-${{ runner.arch }}-trixie-${{ matrix.openldap.cache_id }}-${{ steps.openldap-source.outputs.revision }}-v1
+
+      - name: Build OpenLDAP
+        if: steps.restore-openldap.outputs.cache-hit != 'true'
+        env:
+          OPENLDAP_CACHE_DIR: .cache/openldap/nightly/${{ matrix.openldap.cache_id }}
+          OPENLDAP_REVISION: ${{ steps.openldap-source.outputs.revision }}
+          OPENLDAP_SHA256: ${{ matrix.openldap.sha256 }}
+          OPENLDAP_SOURCE: ${{ matrix.openldap.source }}
+          OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+        run: |
+          mkdir -p "$OPENLDAP_CACHE_DIR"
+          docker run --rm --interactive \
+            --volume "$PWD/$OPENLDAP_CACHE_DIR:/opt/openldap" \
+            --env OPENLDAP_REVISION="$OPENLDAP_REVISION" \
+            --env OPENLDAP_SHA256="$OPENLDAP_SHA256" \
+            --env OPENLDAP_SOURCE="$OPENLDAP_SOURCE" \
+            --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
+            debian:trixie \
+            bash -s <<'EOF'
+          set -euxo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            file \
+            groff-base \
+            libltdl-dev \
+            libsasl2-dev
+
+          install -d /tmp/openldap-source
+          openldap_archive=/tmp/openldap-source.tgz
+          if [ "$OPENLDAP_SOURCE" = "release" ]; then
+            curl --fail --location --silent --show-error \
+              "https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-$OPENLDAP_VERSION.tgz" \
+              --output "$openldap_archive"
+            printf '%s  %s\n' "$OPENLDAP_SHA256" "$openldap_archive" \
+              | sha256sum --check
+          else
+            curl --fail --location --silent --show-error \
+              "https://github.com/openldap/openldap/archive/$OPENLDAP_REVISION.tar.gz" \
+              --output "$openldap_archive"
+          fi
+          tar --extract --gzip \
+            --strip-components=1 \
+            --file "$openldap_archive" \
+            --directory /tmp/openldap-source
+
+          cd /tmp/openldap-source
+          ./configure \
+            --prefix=/opt/openldap \
+            --with-cyrus-sasl \
+            --without-tls \
+            --disable-modules \
+            --enable-mdb=yes \
+            --enable-syncprov=yes \
+            --enable-sssvlv=yes
+          make depend
+          make -j2
+          make install
+
+          test -x /opt/openldap/libexec/slapd
+          chmod -R a+rX /opt/openldap
+          EOF
+
+      - name: Save OpenLDAP source build
+        if: steps.restore-openldap.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/openldap/nightly/${{ matrix.openldap.cache_id }}
+          key: ${{ steps.restore-openldap.outputs.cache-primary-key }}
+
+      - name: Run full Cucumber suite
+        env:
+          OPENLDAP_CACHE_DIR: .cache/openldap/nightly/${{ matrix.openldap.cache_id }}
+          OPENLDAP_SOURCE: ${{ matrix.openldap.source }}
+          OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+        run: |
+          docker run --rm --interactive \
+            --volume "$PWD:/src:ro" \
+            --volume "$PWD/$OPENLDAP_CACHE_DIR:/opt/openldap:ro" \
+            --workdir /work \
+            --env OPENLDAP_SOURCE="$OPENLDAP_SOURCE" \
+            --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
+            debian:trixie \
+            bash -s <<'EOF'
+          set -euxo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+          export HOME=/tmp/net-ldapapi-home
+
+          cp -a /src/. /work/
+          sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
+          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
+
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            ldap-utils \
+            libconvert-asn1-perl \
+            libdevel-cover-perl \
+            libsasl2-dev \
+            libtest-bdd-cucumber-perl \
+            slapd
+
+          perl -MTest::BDD::Cucumber \
+            -e 'print "$Test::BDD::Cucumber::VERSION\n"'
+
+          export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
+          export LD_LIBRARY_PATH=/opt/openldap/lib
+          slapd_command=/opt/openldap/libexec/slapd
+
+          "$slapd_command" -VV > /tmp/slapd-version.txt 2>&1 || true
+          cat /tmp/slapd-version.txt
+          if [ "$OPENLDAP_SOURCE" = "release" ]; then
+            grep -F "$OPENLDAP_VERSION" /tmp/slapd-version.txt
+          fi
+
+          cd /work
+          perl Makefile.PL \
+            -sdk openldap \
+            -include_path /opt/openldap/include \
+            -lib_path /opt/openldap/lib \
+            -sasl_include_path /usr/include/sasl
+          make
+
+          mkdir -p "$HOME"
+          cat > "$HOME/.net-ldapapi-test-config.conf" <<'PERL'
+          $RunDeveloperTests = 1;
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-host'} = '127.0.0.1';
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-port'} = 39010;
+          $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
+          1;
+          PERL
+
+          cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
+          sed -i \
+            -e '/^modulepath[[:space:]]/d' \
+            -e '/^moduleload[[:space:]]/d' \
+            /tmp/net-ldapapi-slapd.conf
+
+          rm -rf /tmp/net-ldapapi-slapd-data /tmp/net-ldapapi-ldapi
+          install -d /tmp/net-ldapapi-slapd-data /run/slapd /var/run/slapd
+          slaptest -f /tmp/net-ldapapi-slapd.conf -u
+          slapadd -f /tmp/net-ldapapi-slapd.conf -l t/ldap/bootstrap.ldif
+
+          "$slapd_command" -f /tmp/net-ldapapi-slapd.conf \
+            -h 'ldap://127.0.0.1:39010/ ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/' \
+            > /tmp/net-ldapapi-slapd.log 2>&1 &
+          slapd_pid="$!"
+
+          cleanup() {
+            kill "$slapd_pid" 2>/dev/null || true
+            wait "$slapd_pid" 2>/dev/null || true
+            cat /tmp/net-ldapapi-slapd.log || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 30); do
+            if ldapsearch -LLL -x \
+              -H ldap://127.0.0.1:39010 \
+              -D cn=admin,dc=example,dc=com \
+              -w password \
+              -b dc=example,dc=com \
+              -s base dn >/tmp/net-ldapapi-smoke.out 2>/tmp/net-ldapapi-smoke.err; then
+              break
+            fi
+            sleep 1
+          done
+
+          cat /tmp/net-ldapapi-smoke.out
+          test -s /tmp/net-ldapapi-smoke.out
+
+          suite_status=0
+          find t/features -maxdepth 1 -type f -name '*.feature' \
+            ! -name 'syncrepl.feature' | sort \
+            > /tmp/net-ldapapi-features.txt
+          printf '%s\n' t/features/syncrepl.feature \
+            >> /tmp/net-ldapapi-features.txt
+          while IFS= read -r feature_file; do
+            echo "::group::${feature_file}"
+            set +e
+            timeout --kill-after=5s 180s \
+              prove -lv t/01-bdd-cucumber.t :: "$feature_file"
+            feature_status="$?"
+            set -e
+            if [ "$feature_status" -ne 0 ]; then
+              suite_status=1
+              if [ "$feature_status" -eq 124 ]; then
+                echo "::error file=${feature_file}::Feature timed out after 180 seconds"
+              fi
+            fi
+            echo "::endgroup::"
+          done < /tmp/net-ldapapi-features.txt
+
+          exit "$suite_status"
+          EOF
+
+  summarize:
+    name: Summarize nightly source matrix
+    if: ${{ always() }}
+    needs: cucumber
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish pass/fail matrix
+        id: matrix-summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              },
+            );
+
+            const results = jobs.flatMap((job) => {
+              const match = job.name.match(
+                /^OpenLDAP (.+) \(source on Debian Trixie\)$/,
+              );
+              if (!match) {
+                return [];
+              }
+
+              const failedStep = (job.steps || []).find(
+                (step) => !['success', 'skipped'].includes(step.conclusion),
+              );
+              const result = job.conclusion === 'success'
+                ? 'PASS'
+                : (job.conclusion || 'unknown').toUpperCase();
+
+              return [{
+                lane: match[1],
+                result,
+                failedStep: failedStep ? failedStep.name : '',
+                url: job.html_url,
+              }];
+            });
+            const laneOrder = ['2.5.20', '2.6.13 LTS', 'master'];
+            results.sort((left, right) => (
+              laneOrder.indexOf(left.lane) - laneOrder.indexOf(right.lane)
+            ));
+            const escapeCell = (value) => value.replace(/\|/g, '\\|');
+
+            const lines = [
+              '# OpenLDAP nightly source-build results',
+              '',
+              `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '| OpenLDAP source | Result | Failed step | Job |',
+              '|---|---|---|---|',
+              ...results.map((item) => [
+                `| ${item.lane}`,
+                item.result,
+                escapeCell(item.failedStep || '-'),
+                `[logs](${item.url}) |`,
+              ].join(' | ')),
+            ];
+
+            const summary = `${lines.join('\n')}\n`;
+            fs.writeFileSync('openldap-nightly-matrix.md', summary);
+            core.info(summary);
+            await core.summary.addRaw(summary).write();
+
+      - name: Upload pass/fail matrix
+        if: steps.matrix-summary.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openldap-nightly-matrix
+          path: openldap-nightly-matrix.md
+          if-no-files-found: error

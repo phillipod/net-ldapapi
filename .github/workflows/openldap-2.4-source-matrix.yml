@@ -1,70 +1,86 @@
-name: OpenLDAP 2.4 SyncRepl bisect
+name: OpenLDAP 2.4 source compatibility
 
 on:
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   cucumber:
-    name: OpenLDAP ${{ matrix.openldap_version }} (source on Debian Wheezy)
+    name: OpenLDAP ${{ matrix.openldap.version }} (source on Debian ${{ matrix.debian.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - openldap_version: 2.4.31
-            openldap_sha256: bde845840df4794b869a6efd6a6b1086f80989038e4844b2e4d7d6b57b39c5b6
-          - openldap_version: 2.4.32
-            openldap_sha256: 9ee413c6a816cb41f71826759b78001d04e747ede9dde302d6ba94ab16f0b82e
-          - openldap_version: 2.4.33
-            openldap_sha256: 81e9eca20f17a69a5d15ebc4c66a323106da4f4f80a32105bc7cdea333aca14c
-          - openldap_version: 2.4.34
-            openldap_sha256: eaab4c4a6b09cc9e60f97e6ef9974f8327d977d1d7af7bc00c2bc5f90dfe0606
-          - openldap_version: 2.4.35
-            openldap_sha256: 16100374c147df0d82a5c52ca60da5eca1a5ea8b5a187467d40a78e3691e9eeb
-          - openldap_version: 2.4.36
-            openldap_sha256: 05b013faa789f38012aa92e2dc42ac02ea77502302ae7dac5ab225cbe73ce67a
-          - openldap_version: 2.4.37
-            openldap_sha256: 3808f4e0800345bedf394882acc169d5d0d41cd204d742ffa217cf391fab5723
-          - openldap_version: 2.4.38
-            openldap_sha256: 88209a3599ec5d9354fc09bbe29b99db1ffa1b612127c06bad0c5265d0b31fd1
-          - openldap_version: 2.4.39
-            openldap_sha256: 8267c87347103fef56b783b24877c0feda1063d3cb85d070e503d076584bf8a7
-          - openldap_version: 2.4.40
-            openldap_sha256: d12611a5c25b6499293c2bb7b435dc2b174db73e83f5a8cb7e34f2ce5fa6dadb
-          - openldap_version: 2.4.41
-            openldap_sha256: 27856bb4a8b44feca2b326c309000e16a9dadd52362c8ab6eec6c67a43737f6e
-          - openldap_version: 2.4.42
-            openldap_sha256: eeb7b0e2c5852bfd2650e83909bb6152835c0b862fab10b63954dc1bcbba8e63
+        debian:
+          - suite: wheezy
+            name: Wheezy
+          - suite: jessie
+            name: Jessie
+        openldap:
+          - version: 2.4.31
+            sha256: bde845840df4794b869a6efd6a6b1086f80989038e4844b2e4d7d6b57b39c5b6
+          - version: 2.4.32
+            sha256: 9ee413c6a816cb41f71826759b78001d04e747ede9dde302d6ba94ab16f0b82e
+          - version: 2.4.33
+            sha256: 81e9eca20f17a69a5d15ebc4c66a323106da4f4f80a32105bc7cdea333aca14c
+          - version: 2.4.34
+            sha256: eaab4c4a6b09cc9e60f97e6ef9974f8327d977d1d7af7bc00c2bc5f90dfe0606
+          - version: 2.4.35
+            sha256: 16100374c147df0d82a5c52ca60da5eca1a5ea8b5a187467d40a78e3691e9eeb
+          - version: 2.4.36
+            sha256: 05b013faa789f38012aa92e2dc42ac02ea77502302ae7dac5ab225cbe73ce67a
+          - version: 2.4.37
+            sha256: 3808f4e0800345bedf394882acc169d5d0d41cd204d742ffa217cf391fab5723
+          - version: 2.4.38
+            sha256: 88209a3599ec5d9354fc09bbe29b99db1ffa1b612127c06bad0c5265d0b31fd1
+          - version: 2.4.39
+            sha256: 8267c87347103fef56b783b24877c0feda1063d3cb85d070e503d076584bf8a7
+          - version: 2.4.40
+            sha256: d12611a5c25b6499293c2bb7b435dc2b174db73e83f5a8cb7e34f2ce5fa6dadb
+          - version: 2.4.41
+            sha256: 27856bb4a8b44feca2b326c309000e16a9dadd52362c8ab6eec6c67a43737f6e
+          - version: 2.4.42
+            sha256: eeb7b0e2c5852bfd2650e83909bb6152835c0b862fab10b63954dc1bcbba8e63
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Build OpenLDAP and run full Cucumber suite
+      - name: Restore OpenLDAP source build
+        id: restore-openldap
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
+          key: openldap-source-${{ runner.os }}-${{ runner.arch }}-${{ matrix.debian.suite }}-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-v1
+
+      - name: Build OpenLDAP
+        if: steps.restore-openldap.outputs.cache-hit != 'true'
         env:
-          OPENLDAP_VERSION: ${{ matrix.openldap_version }}
-          OPENLDAP_SHA256: ${{ matrix.openldap_sha256 }}
+          IMAGE: debian:${{ matrix.debian.suite }}
+          DEBIAN_SUITE: ${{ matrix.debian.suite }}
+          OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+          OPENLDAP_SHA256: ${{ matrix.openldap.sha256 }}
+          OPENLDAP_CACHE_DIR: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
         run: |
+          mkdir -p "$OPENLDAP_CACHE_DIR"
           docker run --rm --interactive \
-            --volume "$PWD:/src:ro" \
-            --workdir /work \
+            --volume "$PWD/$OPENLDAP_CACHE_DIR:/opt/openldap" \
+            --env DEBIAN_SUITE="$DEBIAN_SUITE" \
             --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
             --env OPENLDAP_SHA256="$OPENLDAP_SHA256" \
-            debian:wheezy \
+            "$IMAGE" \
             bash -s <<'EOF'
           set -euxo pipefail
 
           export DEBIAN_FRONTEND=noninteractive
-          export HOME=/tmp/net-ldapapi-home
-
-          cp -a /src/. /work/
-          sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
-          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
 
           printf '%s\n' \
-            'deb http://archive.debian.org/debian wheezy main' \
-            'deb http://archive.debian.org/debian-security wheezy/updates main' \
+            "deb http://archive.debian.org/debian $DEBIAN_SUITE main" \
+            "deb http://archive.debian.org/debian-security $DEBIAN_SUITE/updates main" \
             > /etc/apt/sources.list
           printf '%s\n' 'Acquire::Check-Valid-Until "false";' \
             > /etc/apt/apt.conf.d/99archive
@@ -77,40 +93,8 @@ jobs:
             curl \
             file \
             groff-base \
-            libconvert-asn1-perl \
-            libdevel-cover-perl \
-            libio-stringy-perl \
-            libjson-pp-perl \
-            libjson-xs-perl \
             libltdl-dev \
-            libnumber-range-perl \
-            libsasl2-dev \
-            libtest-bdd-cucumber-perl \
-            slapd
-
-          printf '%s\n' \
-            'deb http://archive.debian.org/debian jessie main' \
-            > /etc/apt/sources.list.d/jessie.list
-          apt-get -o Acquire::Check-Valid-Until=false update
-          apt-get -o Acquire::Check-Valid-Until=false \
-            --allow-unauthenticated \
-            install -y --no-install-recommends \
-            libjson-maybexs-perl=1.002006-1 \
-            libjson-pp-perl=2.27300-2
-
-          curl --fail --location --silent --show-error \
-            http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
-            --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
-          printf '%s  %s\n' \
-            a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
-            /tmp/Test-BDD-Cucumber-0.31.tar.gz \
-            | sha256sum --check
-          tar --extract --gzip \
-            --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
-            --directory /tmp
-          cd /tmp/Test-BDD-Cucumber-0.31
-          perl Makefile.PL
-          make install
+            libsasl2-dev
 
           openldap_archive="/tmp/openldap-$OPENLDAP_VERSION.tgz"
           curl --fail --location --silent --show-error \
@@ -136,6 +120,92 @@ jobs:
           make -j2
           make install
 
+          test -x /opt/openldap/libexec/slapd
+          chmod -R a+rX /opt/openldap
+          EOF
+
+      - name: Save OpenLDAP source build
+        if: steps.restore-openldap.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
+          key: ${{ steps.restore-openldap.outputs.cache-primary-key }}
+
+      - name: Run full Cucumber suite
+        env:
+          IMAGE: debian:${{ matrix.debian.suite }}
+          DEBIAN_SUITE: ${{ matrix.debian.suite }}
+          OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+          OPENLDAP_CACHE_DIR: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
+        run: |
+          docker run --rm --interactive \
+            --volume "$PWD:/src:ro" \
+            --volume "$PWD/$OPENLDAP_CACHE_DIR:/opt/openldap:ro" \
+            --workdir /work \
+            --env DEBIAN_SUITE="$DEBIAN_SUITE" \
+            --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
+            "$IMAGE" \
+            bash -s <<'EOF'
+          set -euxo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+          export HOME=/tmp/net-ldapapi-home
+
+          cp -a /src/. /work/
+          sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
+          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
+
+          printf '%s\n' \
+            "deb http://archive.debian.org/debian $DEBIAN_SUITE main" \
+            "deb http://archive.debian.org/debian-security $DEBIAN_SUITE/updates main" \
+            > /etc/apt/sources.list
+          printf '%s\n' 'Acquire::Check-Valid-Until "false";' \
+            > /etc/apt/apt.conf.d/99archive
+          apt-get -o Acquire::Check-Valid-Until=false update
+          apt-get -o Acquire::Check-Valid-Until=false \
+            --allow-unauthenticated \
+            install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            libconvert-asn1-perl \
+            libdevel-cover-perl \
+            libio-stringy-perl \
+            libjson-pp-perl \
+            libjson-xs-perl \
+            libnumber-range-perl \
+            libsasl2-dev \
+            libtest-bdd-cucumber-perl \
+            slapd
+
+          if [ "$DEBIAN_SUITE" = "wheezy" ]; then
+            printf '%s\n' \
+              'deb http://archive.debian.org/debian jessie main' \
+              > /etc/apt/sources.list.d/jessie.list
+            apt-get -o Acquire::Check-Valid-Until=false update
+            apt-get -o Acquire::Check-Valid-Until=false \
+              --allow-unauthenticated \
+              install -y --no-install-recommends \
+              libjson-maybexs-perl=1.002006-1 \
+              libjson-pp-perl=2.27300-2
+
+            curl --fail --location --silent --show-error \
+              http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
+              --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
+            printf '%s  %s\n' \
+              a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
+              /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              | sha256sum --check
+            tar --extract --gzip \
+              --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              --directory /tmp
+            cd /tmp/Test-BDD-Cucumber-0.31
+            perl Makefile.PL
+            make install
+          fi
+
+          perl -MTest::BDD::Cucumber -e 'print "$Test::BDD::Cucumber::VERSION\n"'
+
           export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
           export LD_LIBRARY_PATH=/opt/openldap/lib
           slapd_command=/opt/openldap/libexec/slapd
@@ -143,7 +213,6 @@ jobs:
           "$slapd_command" -VV > /tmp/slapd-version.txt 2>&1 || true
           cat /tmp/slapd-version.txt
           grep -F "$OPENLDAP_VERSION" /tmp/slapd-version.txt
-          perl -MTest::BDD::Cucumber -e 'print "$Test::BDD::Cucumber::VERSION\n"'
 
           cd /work
           perl Makefile.PL \
@@ -158,6 +227,7 @@ jobs:
           $RunDeveloperTests = 1;
           $TestConfig{'ldap'}{'server'}{'tcp'}{'-host'} = '127.0.0.1';
           $TestConfig{'ldap'}{'server'}{'tcp'}{'-port'} = 39010;
+          $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
           1;
           PERL
 
@@ -167,13 +237,13 @@ jobs:
             -e '/^moduleload[[:space:]]/d' \
             /tmp/net-ldapapi-slapd.conf
 
-          rm -rf /tmp/net-ldapapi-slapd-data
+          rm -rf /tmp/net-ldapapi-slapd-data /tmp/net-ldapapi-ldapi
           install -d /tmp/net-ldapapi-slapd-data /run/slapd /var/run/slapd
           slaptest -f /tmp/net-ldapapi-slapd.conf -u
           slapadd -f /tmp/net-ldapapi-slapd.conf -l t/ldap/bootstrap.ldif
 
           "$slapd_command" -f /tmp/net-ldapapi-slapd.conf \
-            -h 'ldap://127.0.0.1:39010/ ldapi:///' \
+            -h 'ldap://127.0.0.1:39010/ ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/' \
             > /tmp/net-ldapapi-slapd.log 2>&1 &
           slapd_pid="$!"
 
@@ -223,3 +293,125 @@ jobs:
 
           exit "$suite_status"
           EOF
+
+  summarize:
+    name: Summarize source-build matrix
+    if: ${{ always() }}
+    needs: cucumber
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish pass/fail matrix
+        id: matrix-summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              },
+            );
+
+            const results = jobs.flatMap((job) => {
+              const match = job.name.match(
+                /^OpenLDAP (2\.4\.\d+) \(source on Debian (Wheezy|Jessie)\)$/,
+              );
+              if (!match) {
+                return [];
+              }
+
+              const failedStep = (job.steps || []).find(
+                (step) => !['success', 'skipped'].includes(step.conclusion),
+              );
+              const result = job.conclusion === 'success'
+                ? 'PASS'
+                : (job.conclusion || 'unknown').toUpperCase();
+
+              return [{
+                version: match[1],
+                debian: match[2],
+                result,
+                failedStep: failedStep ? failedStep.name : '',
+                url: job.html_url,
+              }];
+            });
+
+            const versions = [...new Set(results.map((item) => item.version))]
+              .sort((left, right) => left.localeCompare(
+                right,
+                undefined,
+                { numeric: true },
+              ));
+            const resultByLane = new Map(
+              results.map((item) => [`${item.version}:${item.debian}`, item]),
+            );
+            const matrixCell = (version, debian) => {
+              const item = resultByLane.get(`${version}:${debian}`);
+              if (!item) {
+                return 'NOT REPORTED';
+              }
+              if (item.result === 'PASS') {
+                return 'PASS';
+              }
+              return item.failedStep
+                ? `${item.result} - ${item.failedStep}`
+                : item.result;
+            };
+            const escapeCell = (value) => value.replace(/\|/g, '\\|');
+
+            const lines = [
+              '# OpenLDAP source-build results',
+              '',
+              `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '| OpenLDAP | Debian Wheezy | Debian Jessie |',
+              '|---|---|---|',
+              ...versions.map((version) => (
+                `| ${version} | ${escapeCell(matrixCell(version, 'Wheezy'))} | ${escapeCell(matrixCell(version, 'Jessie'))} |`
+              )),
+            ];
+
+            const failures = results.filter((item) => item.result !== 'PASS');
+            if (failures.length) {
+              lines.push(
+                '',
+                '## Failed lanes',
+                '',
+                '| OpenLDAP | Debian | Result | Failed step | Job |',
+                '|---|---|---|---|---|',
+                ...failures
+                  .sort((left, right) => (
+                    left.version.localeCompare(
+                      right.version,
+                      undefined,
+                      { numeric: true },
+                    ) || left.debian.localeCompare(right.debian)
+                  ))
+                  .map((item) => [
+                    `| ${item.version}`,
+                    item.debian,
+                    item.result,
+                    escapeCell(item.failedStep || 'Not reported'),
+                    `[logs](${item.url}) |`,
+                  ].join(' | ')),
+              );
+            } else {
+              lines.push('', 'All lanes passed.');
+            }
+
+            const summary = `${lines.join('\n')}\n`;
+            fs.writeFileSync('openldap-source-matrix.md', summary);
+            core.info(summary);
+            await core.summary.addRaw(summary).write();
+
+      - name: Upload pass/fail matrix
+        if: steps.matrix-summary.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openldap-source-matrix
+          path: openldap-source-matrix.md
+          if-no-files-found: error

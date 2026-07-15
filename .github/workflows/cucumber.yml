@@ -5,6 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   cucumber:
     name: ${{ matrix.name }}
@@ -206,3 +210,83 @@ jobs:
 
           exit "$suite_status"
           EOF
+
+  summarize:
+    name: Summarize compatibility matrix
+    if: ${{ always() }}
+    needs: cucumber
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish pass/fail matrix
+        id: matrix-summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              },
+            );
+
+            const results = jobs.flatMap((job) => {
+              const match = job.name.match(
+                /^OpenLDAP ([0-9.]+) \(Debian ([^)]+)\)$/,
+              );
+              if (!match) {
+                return [];
+              }
+
+              const failedStep = (job.steps || []).find(
+                (step) => !['success', 'skipped'].includes(step.conclusion),
+              );
+              const result = job.conclusion === 'success'
+                ? 'PASS'
+                : (job.conclusion || 'unknown').toUpperCase();
+
+              return [{
+                version: match[1],
+                debian: match[2],
+                result,
+                failedStep: failedStep ? failedStep.name : '',
+                url: job.html_url,
+              }];
+            }).sort((left, right) => left.version.localeCompare(
+              right.version,
+              undefined,
+              { numeric: true },
+            ));
+            const escapeCell = (value) => value.replace(/\|/g, '\\|');
+
+            const lines = [
+              '# OpenLDAP binary compatibility results',
+              '',
+              `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '| OpenLDAP | Debian | Result | Failed step | Job |',
+              '|---|---|---|---|---|',
+              ...results.map((item) => [
+                `| ${item.version}`,
+                item.debian,
+                item.result,
+                escapeCell(item.failedStep || '-'),
+                `[logs](${item.url}) |`,
+              ].join(' | ')),
+            ];
+
+            const summary = `${lines.join('\n')}\n`;
+            fs.writeFileSync('openldap-compatibility-matrix.md', summary);
+            core.info(summary);
+            await core.summary.addRaw(summary).write();
+
+      - name: Upload pass/fail matrix
+        if: steps.matrix-summary.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openldap-compatibility-matrix
+          path: openldap-compatibility-matrix.md
+          if-no-files-found: error
