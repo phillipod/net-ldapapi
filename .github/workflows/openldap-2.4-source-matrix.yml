@@ -1,0 +1,207 @@
+name: OpenLDAP 2.4 SyncRepl bisect
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cucumber:
+    name: OpenLDAP ${{ matrix.openldap_version }} (source on Debian Wheezy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - openldap_version: 2.4.32
+            openldap_sha256: 9ee413c6a816cb41f71826759b78001d04e747ede9dde302d6ba94ab16f0b82e
+          - openldap_version: 2.4.33
+            openldap_sha256: 81e9eca20f17a69a5d15ebc4c66a323106da4f4f80a32105bc7cdea333aca14c
+          - openldap_version: 2.4.34
+            openldap_sha256: eaab4c4a6b09cc9e60f97e6ef9974f8327d977d1d7af7bc00c2bc5f90dfe0606
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build OpenLDAP and run full Cucumber suite
+        env:
+          OPENLDAP_VERSION: ${{ matrix.openldap_version }}
+          OPENLDAP_SHA256: ${{ matrix.openldap_sha256 }}
+        run: |
+          docker run --rm --interactive \
+            --volume "$PWD:/src:ro" \
+            --workdir /work \
+            --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
+            --env OPENLDAP_SHA256="$OPENLDAP_SHA256" \
+            debian:wheezy \
+            bash -s <<'EOF'
+          set -euxo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+          export HOME=/tmp/net-ldapapi-home
+
+          cp -a /src/. /work/
+          sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
+          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
+
+          printf '%s\n' \
+            'deb http://archive.debian.org/debian wheezy main' \
+            'deb http://archive.debian.org/debian-security wheezy/updates main' \
+            > /etc/apt/sources.list
+          printf '%s\n' 'Acquire::Check-Valid-Until "false";' \
+            > /etc/apt/apt.conf.d/99archive
+          apt-get -o Acquire::Check-Valid-Until=false update
+          apt-get -o Acquire::Check-Valid-Until=false \
+            --allow-unauthenticated \
+            install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            file \
+            groff-base \
+            libconvert-asn1-perl \
+            libdevel-cover-perl \
+            libio-stringy-perl \
+            libjson-pp-perl \
+            libjson-xs-perl \
+            libltdl-dev \
+            libnumber-range-perl \
+            libsasl2-dev \
+            libtest-bdd-cucumber-perl \
+            slapd
+
+          printf '%s\n' \
+            'deb http://archive.debian.org/debian jessie main' \
+            > /etc/apt/sources.list.d/jessie.list
+          apt-get -o Acquire::Check-Valid-Until=false update
+          apt-get -o Acquire::Check-Valid-Until=false \
+            --allow-unauthenticated \
+            install -y --no-install-recommends \
+            libjson-maybexs-perl=1.002006-1 \
+            libjson-pp-perl=2.27300-2
+
+          curl --fail --location --silent --show-error \
+            http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
+            --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
+          printf '%s  %s\n' \
+            a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
+            /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+            | sha256sum --check
+          tar --extract --gzip \
+            --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+            --directory /tmp
+          cd /tmp/Test-BDD-Cucumber-0.31
+          perl Makefile.PL
+          make install
+
+          openldap_archive="/tmp/openldap-$OPENLDAP_VERSION.tgz"
+          curl --fail --location --silent --show-error \
+            "http://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-$OPENLDAP_VERSION.tgz" \
+            --output "$openldap_archive"
+          printf '%s  %s\n' "$OPENLDAP_SHA256" "$openldap_archive" \
+            | sha256sum --check
+          tar --extract --gzip \
+            --file "$openldap_archive" \
+            --directory /tmp
+          cd "/tmp/openldap-$OPENLDAP_VERSION"
+          ./configure \
+            --prefix=/opt/openldap \
+            --with-cyrus-sasl \
+            --without-tls \
+            --disable-modules \
+            --enable-mdb=yes \
+            --disable-bdb \
+            --disable-hdb \
+            --enable-syncprov=yes \
+            --enable-sssvlv=yes
+          make depend
+          make -j2
+          make install
+
+          export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
+          export LD_LIBRARY_PATH=/opt/openldap/lib
+          slapd_command=/opt/openldap/libexec/slapd
+
+          "$slapd_command" -VV > /tmp/slapd-version.txt 2>&1 || true
+          cat /tmp/slapd-version.txt
+          grep -F "$OPENLDAP_VERSION" /tmp/slapd-version.txt
+          perl -MTest::BDD::Cucumber -e 'print "$Test::BDD::Cucumber::VERSION\n"'
+
+          cd /work
+          perl Makefile.PL \
+            -sdk openldap \
+            -include_path /opt/openldap/include \
+            -lib_path /opt/openldap/lib \
+            -sasl_include_path /usr/include/sasl
+          make
+
+          mkdir -p "$HOME"
+          cat > "$HOME/.net-ldapapi-test-config.conf" <<'PERL'
+          $RunDeveloperTests = 1;
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-host'} = '127.0.0.1';
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-port'} = 39010;
+          1;
+          PERL
+
+          cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
+          sed -i \
+            -e '/^modulepath[[:space:]]/d' \
+            -e '/^moduleload[[:space:]]/d' \
+            /tmp/net-ldapapi-slapd.conf
+
+          rm -rf /tmp/net-ldapapi-slapd-data
+          install -d /tmp/net-ldapapi-slapd-data /run/slapd /var/run/slapd
+          slaptest -f /tmp/net-ldapapi-slapd.conf -u
+          slapadd -f /tmp/net-ldapapi-slapd.conf -l t/ldap/bootstrap.ldif
+
+          "$slapd_command" -f /tmp/net-ldapapi-slapd.conf \
+            -h 'ldap://127.0.0.1:39010/ ldapi:///' \
+            > /tmp/net-ldapapi-slapd.log 2>&1 &
+          slapd_pid="$!"
+
+          cleanup() {
+            kill "$slapd_pid" 2>/dev/null || true
+            wait "$slapd_pid" 2>/dev/null || true
+            cat /tmp/net-ldapapi-slapd.log || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 30); do
+            if ldapsearch -LLL -x \
+              -H ldap://127.0.0.1:39010 \
+              -D cn=admin,dc=example,dc=com \
+              -w password \
+              -b dc=example,dc=com \
+              -s base dn >/tmp/net-ldapapi-smoke.out 2>/tmp/net-ldapapi-smoke.err; then
+              break
+            fi
+            sleep 1
+          done
+
+          cat /tmp/net-ldapapi-smoke.out
+          test -s /tmp/net-ldapapi-smoke.out
+
+          suite_status=0
+          find t/features -maxdepth 1 -type f -name '*.feature' \
+            ! -name 'syncrepl.feature' | sort \
+            > /tmp/net-ldapapi-features.txt
+          printf '%s\n' t/features/syncrepl.feature \
+            >> /tmp/net-ldapapi-features.txt
+          while IFS= read -r feature_file; do
+            echo "::group::${feature_file}"
+            set +e
+            timeout --kill-after=5s 60s \
+              prove -lv t/01-bdd-cucumber.t :: "$feature_file"
+            feature_status="$?"
+            set -e
+            if [ "$feature_status" -ne 0 ]; then
+              suite_status=1
+              if [ "$feature_status" -eq 124 ]; then
+                echo "::error file=${feature_file}::Feature timed out after 60 seconds"
+              fi
+            fi
+            echo "::endgroup::"
+          done < /tmp/net-ldapapi-features.txt
+
+          exit "$suite_status"
+          EOF
