@@ -20,6 +20,22 @@ jobs:
             openldap_sha256: 81e9eca20f17a69a5d15ebc4c66a323106da4f4f80a32105bc7cdea333aca14c
           - openldap_version: 2.4.34
             openldap_sha256: eaab4c4a6b09cc9e60f97e6ef9974f8327d977d1d7af7bc00c2bc5f90dfe0606
+          - openldap_version: 2.4.35
+            openldap_sha256: 16100374c147df0d82a5c52ca60da5eca1a5ea8b5a187467d40a78e3691e9eeb
+          - openldap_version: 2.4.36
+            openldap_sha256: 05b013faa789f38012aa92e2dc42ac02ea77502302ae7dac5ab225cbe73ce67a
+          - openldap_version: 2.4.37
+            openldap_sha256: 3808f4e0800345bedf394882acc169d5d0d41cd204d742ffa217cf391fab5723
+          - openldap_version: 2.4.38
+            openldap_sha256: 88209a3599ec5d9354fc09bbe29b99db1ffa1b612127c06bad0c5265d0b31fd1
+          - openldap_version: 2.4.39
+            openldap_sha256: 8267c87347103fef56b783b24877c0feda1063d3cb85d070e503d076584bf8a7
+          - openldap_version: 2.4.40
+            openldap_sha256: d12611a5c25b6499293c2bb7b435dc2b174db73e83f5a8cb7e34f2ce5fa6dadb
+          - openldap_version: 2.4.41
+            openldap_sha256: 27856bb4a8b44feca2b326c309000e16a9dadd52362c8ab6eec6c67a43737f6e
+          - openldap_version: 2.4.42
+            openldap_sha256: eeb7b0e2c5852bfd2650e83909bb6152835c0b862fab10b63954dc1bcbba8e63
 
     steps:
       - name: Check out source
