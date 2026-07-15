@@ -1,4 +1,4 @@
-name: Cucumber
+name: OpenLDAP compatibility
 
 on:
   push:
@@ -14,29 +14,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: openldap-2.4.31-older-control
+          - name: OpenLDAP 2.4.31 (Debian Wheezy)
             image: debian:wheezy
             expected_openldap: 2.4.31
             debian_archive: true
             debian_suite: wheezy
             cucumber_from_cpan: true
-          - name: openldap-2.4.40-before-syncrepl-regression-window
+          - name: OpenLDAP 2.4.40 (Debian Jessie)
             image: debian:jessie
             expected_openldap: 2.4.40
             debian_archive: true
             debian_suite: jessie
             cucumber_from_cpan: false
-          - name: openldap-2.4.42-after-syncrepl-regression-window
-            image: ubuntu:16.04
-            expected_openldap: 2.4.42
-            debian_archive: false
-            cucumber_from_cpan: false
-          - name: openldap-2.5.13-stable-packaged
+          - name: OpenLDAP 2.5.13 (Debian Bookworm)
             image: debian:bookworm
             expected_openldap: 2.5.13
             debian_archive: false
             cucumber_from_cpan: false
-          - name: openldap-2.6.10-current-packaged
+          - name: OpenLDAP 2.6.10 (Debian Trixie)
             image: debian:trixie
             expected_openldap: 2.6.10
             debian_archive: false
