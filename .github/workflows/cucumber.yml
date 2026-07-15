@@ -1,0 +1,157 @@
+name: Cucumber
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cucumber:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: openldap-2.4.40-before-syncrepl-regression-window
+            image: debian:jessie
+            expected_openldap: 2.4.40
+            debian_archive: true
+          - name: openldap-2.4.42-after-syncrepl-regression-window
+            image: ubuntu:16.04
+            expected_openldap: 2.4.42
+            debian_archive: false
+          - name: openldap-2.5.13-stable-packaged
+            image: debian:bookworm
+            expected_openldap: 2.5.13
+            debian_archive: false
+          - name: openldap-2.6.10-current-packaged
+            image: debian:trixie
+            expected_openldap: 2.6.10
+            debian_archive: false
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run full Cucumber suite
+        env:
+          IMAGE: ${{ matrix.image }}
+          EXPECTED_OPENLDAP: ${{ matrix.expected_openldap }}
+          DEBIAN_ARCHIVE: ${{ matrix.debian_archive }}
+        run: |
+          docker run --rm --interactive \
+            --volume "$PWD:/src:ro" \
+            --workdir /work \
+            --env EXPECTED_OPENLDAP="$EXPECTED_OPENLDAP" \
+            --env DEBIAN_ARCHIVE="$DEBIAN_ARCHIVE" \
+            "$IMAGE" \
+            bash -s <<'EOF'
+          set -euxo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+          export HOME=/tmp/net-ldapapi-home
+
+          cp -a /src/. /work/
+          sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
+          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
+
+          if [ "$DEBIAN_ARCHIVE" = "true" ]; then
+            printf '%s\n' \
+              'deb http://archive.debian.org/debian jessie main' \
+              'deb http://archive.debian.org/debian-security jessie/updates main' \
+              > /etc/apt/sources.list
+            printf '%s\n' 'Acquire::Check-Valid-Until "false";' \
+              > /etc/apt/apt.conf.d/99archive
+            apt-get -o Acquire::Check-Valid-Until=false update
+            apt-get -o Acquire::Check-Valid-Until=false \
+              --allow-unauthenticated \
+              install -y --no-install-recommends \
+              build-essential \
+              ca-certificates \
+              ldap-utils \
+              libconvert-asn1-perl \
+              libdevel-cover-perl \
+              libldap2-dev \
+              libsasl2-dev \
+              libtest-bdd-cucumber-perl \
+              slapd
+          else
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              build-essential \
+              ca-certificates \
+              ldap-utils \
+              libconvert-asn1-perl \
+              libdevel-cover-perl \
+              libldap2-dev \
+              libsasl2-dev \
+              libtest-bdd-cucumber-perl \
+              slapd
+          fi
+
+          slapd -VV 2>&1 | tee /tmp/slapd-version.txt
+          grep -F "$EXPECTED_OPENLDAP" /tmp/slapd-version.txt
+
+          multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+          perl Makefile.PL \
+            -sdk openldap \
+            -include_path /usr/include \
+            -lib_path "/usr/lib/$multiarch" \
+            -sasl_include_path /usr/include/sasl
+          make
+
+          mkdir -p "$HOME"
+          cat > "$HOME/.net-ldapapi-test-config.conf" <<'PERL'
+          $RunDeveloperTests = 1;
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-host'} = '127.0.0.1';
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-port'} = 39010;
+          1;
+          PERL
+
+          rm -rf /tmp/net-ldapapi-slapd-data
+          install -d /tmp/net-ldapapi-slapd-data /run/slapd /var/run/slapd
+          slaptest -f t/ldap/slapd.conf -u
+          slapadd -f t/ldap/slapd.conf -l t/ldap/bootstrap.ldif
+
+          slapd -f t/ldap/slapd.conf \
+            -h 'ldap://127.0.0.1:39010/ ldapi:///' \
+            > /tmp/net-ldapapi-slapd.log 2>&1 &
+          slapd_pid="$!"
+
+          cleanup() {
+            kill "$slapd_pid" 2>/dev/null || true
+            wait "$slapd_pid" 2>/dev/null || true
+            cat /tmp/net-ldapapi-slapd.log || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 30); do
+            if ldapsearch -LLL -x \
+              -H ldap://127.0.0.1:39010 \
+              -D cn=admin,dc=example,dc=com \
+              -w password \
+              -b dc=example,dc=com \
+              -s base dn >/tmp/net-ldapapi-smoke.out 2>/tmp/net-ldapapi-smoke.err; then
+              break
+            fi
+            sleep 1
+          done
+
+          cat /tmp/net-ldapapi-smoke.out
+          test -s /tmp/net-ldapapi-smoke.out
+
+          suite_status=0
+          find t/features -maxdepth 1 -type f -name '*.feature' | sort \
+            > /tmp/net-ldapapi-features.txt
+          while IFS= read -r feature_file; do
+            echo "::group::${feature_file}"
+            if ! prove -lv t/01-bdd-cucumber.t :: "$feature_file"; then
+              suite_status=1
+            fi
+            echo "::endgroup::"
+          done < /tmp/net-ldapapi-features.txt
+
+          exit "$suite_status"
+          EOF

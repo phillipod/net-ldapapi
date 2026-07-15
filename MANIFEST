@@ -44,4 +44,7 @@ t/features/extended_operations.feature
 t/features/bind.feature
 t/features/delete.feature
 t/01-bdd-cucumber.t
+t/ldap/bootstrap.ldif
+t/ldap/README.md
+t/ldap/slapd.conf
 t/test-config.pl

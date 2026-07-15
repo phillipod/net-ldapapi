@@ -1,0 +1,12 @@
+# Naming context required by t/test-config.pl.
+dn: dc=example,dc=com
+objectClass: top
+objectClass: domain
+dc: example
+
+# The database root DN also supplies the suite's single persistent search hit.
+dn: cn=admin,dc=example,dc=com
+objectClass: top
+objectClass: person
+cn: admin
+sn: Last

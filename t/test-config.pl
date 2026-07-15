@@ -1,6 +1,8 @@
 # Developer tests require:
 #   Test::More
 #   Test::BDD::Cucumber
+# The minimum OpenLDAP schema, bootstrap data, and server contract are
+# documented in t/ldap/README.md.
 our $RunDeveloperTests = 0;
 
 # Default config. 
