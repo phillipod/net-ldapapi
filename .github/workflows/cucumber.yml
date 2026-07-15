@@ -14,22 +14,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: openldap-2.4.31-older-control
+            image: debian:wheezy
+            expected_openldap: 2.4.31
+            debian_archive: true
+            debian_suite: wheezy
+            cucumber_from_cpan: true
           - name: openldap-2.4.40-before-syncrepl-regression-window
             image: debian:jessie
             expected_openldap: 2.4.40
             debian_archive: true
+            debian_suite: jessie
+            cucumber_from_cpan: false
           - name: openldap-2.4.42-after-syncrepl-regression-window
             image: ubuntu:16.04
             expected_openldap: 2.4.42
             debian_archive: false
+            cucumber_from_cpan: false
           - name: openldap-2.5.13-stable-packaged
             image: debian:bookworm
             expected_openldap: 2.5.13
             debian_archive: false
+            cucumber_from_cpan: false
           - name: openldap-2.6.10-current-packaged
             image: debian:trixie
             expected_openldap: 2.6.10
             debian_archive: false
+            cucumber_from_cpan: false
 
     steps:
       - name: Check out source
@@ -40,12 +51,16 @@ jobs:
           IMAGE: ${{ matrix.image }}
           EXPECTED_OPENLDAP: ${{ matrix.expected_openldap }}
           DEBIAN_ARCHIVE: ${{ matrix.debian_archive }}
+          DEBIAN_SUITE: ${{ matrix.debian_suite }}
+          CUCUMBER_FROM_CPAN: ${{ matrix.cucumber_from_cpan }}
         run: |
           docker run --rm --interactive \
             --volume "$PWD:/src:ro" \
             --workdir /work \
             --env EXPECTED_OPENLDAP="$EXPECTED_OPENLDAP" \
             --env DEBIAN_ARCHIVE="$DEBIAN_ARCHIVE" \
+            --env DEBIAN_SUITE="$DEBIAN_SUITE" \
+            --env CUCUMBER_FROM_CPAN="$CUCUMBER_FROM_CPAN" \
             "$IMAGE" \
             bash -s <<'EOF'
           set -euxo pipefail
@@ -58,9 +73,21 @@ jobs:
           grep -F "\$VERSION = '3.000999';" LDAPapi.pm
 
           if [ "$DEBIAN_ARCHIVE" = "true" ]; then
+            cucumber_packages=(libtest-bdd-cucumber-perl)
+            if [ "$CUCUMBER_FROM_CPAN" = "true" ]; then
+              cucumber_packages=(
+                curl
+                libio-stringy-perl
+                libjson-pp-perl
+                libjson-xs-perl
+                libnumber-range-perl
+                libtest-bdd-cucumber-perl
+              )
+            fi
+
             printf '%s\n' \
-              'deb http://archive.debian.org/debian jessie main' \
-              'deb http://archive.debian.org/debian-security jessie/updates main' \
+              "deb http://archive.debian.org/debian $DEBIAN_SUITE main" \
+              "deb http://archive.debian.org/debian-security $DEBIAN_SUITE/updates main" \
               > /etc/apt/sources.list
             printf '%s\n' 'Acquire::Check-Valid-Until "false";' \
               > /etc/apt/apt.conf.d/99archive
@@ -75,7 +102,7 @@ jobs:
               libdevel-cover-perl \
               libldap2-dev \
               libsasl2-dev \
-              libtest-bdd-cucumber-perl \
+              "${cucumber_packages[@]}" \
               slapd
           else
             apt-get update
@@ -90,6 +117,34 @@ jobs:
               libtest-bdd-cucumber-perl \
               slapd
           fi
+
+          if [ "$CUCUMBER_FROM_CPAN" = "true" ]; then
+            printf '%s\n' \
+              'deb http://archive.debian.org/debian jessie main' \
+              > /etc/apt/sources.list.d/jessie.list
+            apt-get -o Acquire::Check-Valid-Until=false update
+            apt-get -o Acquire::Check-Valid-Until=false \
+              --allow-unauthenticated \
+              install -y --no-install-recommends \
+              libjson-maybexs-perl=1.002006-1 \
+              libjson-pp-perl=2.27300-2
+            curl --fail --location --silent --show-error \
+              http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
+              --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
+            printf '%s  %s\n' \
+              a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
+              /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              | sha256sum --check
+            tar --extract --gzip \
+              --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              --directory /tmp
+            cd /tmp/Test-BDD-Cucumber-0.31
+            perl Makefile.PL
+            make install
+            cd /work
+          fi
+
+          perl -MTest::BDD::Cucumber -e 'print "$Test::BDD::Cucumber::VERSION\n"'
 
           slapd -VV > /tmp/slapd-version.txt 2>&1 || true
           cat /tmp/slapd-version.txt
