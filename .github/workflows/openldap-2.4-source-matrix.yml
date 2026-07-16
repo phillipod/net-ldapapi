@@ -401,7 +401,11 @@ jobs:
 
           cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
           if [ "$needs_legacy_sasl_auxprop" = true ]; then
-            printf '%s\n' 'sasl-auxprops slapd' >> /tmp/net-ldapapi-slapd.conf
+            perl -0pi -e '
+              our $found;
+              $found += s/^(database[ \t]+)/sasl-auxprops slapd\n$1/m;
+              END { die "Could not insert sasl-auxprops before database definition\n" unless $found }
+            ' /tmp/net-ldapapi-slapd.conf
           fi
           schema_dir=/opt/openldap/etc/openldap/schema
           test -r "$schema_dir/core.schema"
@@ -779,7 +783,11 @@ jobs:
           slapd_conf=/tmp/net-ldapapi-slapd.conf
           cp t/ldap/slapd.conf "$slapd_conf"
           if [ "$needs_legacy_sasl_auxprop" = true ]; then
-            printf '%s\n' 'sasl-auxprops slapd' >> "$slapd_conf"
+            perl -0pi -e '
+              our $found;
+              $found += s/^(database[ \t]+)/sasl-auxprops slapd\n$1/m;
+              END { die "Could not insert sasl-auxprops before database definition\n" unless $found }
+            ' "$slapd_conf"
           fi
           schema_dir="$OPENLDAP_PREFIX/etc/openldap/schema"
           test -r "$schema_dir/core.schema"
