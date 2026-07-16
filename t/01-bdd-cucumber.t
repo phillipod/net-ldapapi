@@ -14,6 +14,7 @@ use strict;
 use warnings;
 use Devel::Cover;
 use File::Find;
+use lib '.', 't/lib';
 use Test::More;
 
 # This will find step definitions and feature files in the directory you point
@@ -21,7 +22,7 @@ use Test::More;
 use Test::BDD::Cucumber::Loader;
  
 # This harness prints out nice TAP
-use Test::BDD::Cucumber::Harness::TestBuilder;
+use Net::LDAPapi::Test::CucumberHarness;
  
 my @feature_files = @ARGV ? @ARGV : feature_files('t/features/');
 
@@ -35,7 +36,7 @@ for my $feature_file (@feature_files) {
         Test::BDD::Cucumber::Loader->load($feature_file);
 
       # Create a Harness to execute against. TestBuilder harness prints TAP
-      my $harness = Test::BDD::Cucumber::Harness::TestBuilder->new({});
+      my $harness = Net::LDAPapi::Test::CucumberHarness->new({});
 
       # For each feature found, execute it, using the Harness to print results
       $executor->execute( $_, $harness ) for @features;

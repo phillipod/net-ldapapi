@@ -20,7 +20,7 @@ jobs:
             name: Wheezy
           - suite: jessie
             name: Jessie
-        openldap:
+        openldap: &openldap_versions
           - version: 2.3.43
             sha256: d7d2dea05362c8ac7e11bb7bf1da4cdeb07225ba8dc16974bff9f51a9f3d37e1
             backend: bdb
@@ -319,14 +319,21 @@ jobs:
             build-essential \
             ca-certificates \
             curl \
+            libclone-perl \
             libconvert-asn1-perl \
             libdevel-cover-perl \
+            libfile-find-rule-perl \
+            libfile-slurp-perl \
             libio-stringy-perl \
             libjson-pp-perl \
             libjson-xs-perl \
+            liblist-moreutils-perl \
+            libmoose-perl \
             libnumber-range-perl \
+            libpath-class-perl \
             libsasl2-dev \
-            libtest-bdd-cucumber-perl \
+            libtest-differences-perl \
+            libyaml-syck-perl \
             slapd
 
           if [ "$DEBIAN_SUITE" = "wheezy" ]; then
@@ -339,21 +346,23 @@ jobs:
               install -y --no-install-recommends \
               libjson-maybexs-perl=1.002006-1 \
               libjson-pp-perl=2.27300-2
-
-            curl --fail --location --silent --show-error \
-              http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
-              --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
-            printf '%s  %s\n' \
-              a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
-              /tmp/Test-BDD-Cucumber-0.31.tar.gz \
-              | sha256sum --check
-            tar --extract --gzip \
-              --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
-              --directory /tmp
-            cd /tmp/Test-BDD-Cucumber-0.31
-            perl Makefile.PL
-            make install
           fi
+
+          curl --fail --location --silent --show-error \
+            http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.34.tar.gz \
+            --output /tmp/Test-BDD-Cucumber-0.34.tar.gz
+          printf '%s  %s\n' \
+            be3184806292a9bf2d24c284ad76180b372221d0de0969decdb797236a3250b7 \
+            /tmp/Test-BDD-Cucumber-0.34.tar.gz \
+            | sha256sum --check
+          tar --extract --gzip \
+            --file /tmp/Test-BDD-Cucumber-0.34.tar.gz \
+            --directory /tmp
+          cd /tmp/Test-BDD-Cucumber-0.34
+          perl Makefile.PL
+          make install
+          perl -MTest::BDD::Cucumber -e \
+            'die "Expected Test::BDD::Cucumber 0.34, found $Test::BDD::Cucumber::VERSION\n" if $Test::BDD::Cucumber::VERSION ne "0.34"'
 
           perl -MTest::BDD::Cucumber -e 'print "$Test::BDD::Cucumber::VERSION\n"'
 
@@ -458,17 +467,353 @@ jobs:
           path: ${{ runner.temp }}/cucumber-results/source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
           if-no-files-found: ignore
 
+  cucumber_freebsd:
+    name: OpenLDAP ${{ matrix.openldap.version }} (source on FreeBSD 15.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        openldap: *openldap_versions
+    env:
+      OPENLDAP_VERSION: ${{ matrix.openldap.version }}
+      OPENLDAP_SHA256: ${{ matrix.openldap.sha256 }}
+      OPENLDAP_BACKEND: ${{ matrix.openldap.backend }}
+      OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
+      OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
+      BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
+      BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
+      OPENLDAP_PREFIX: ${{ github.workspace }}/.cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Restore FreeBSD OpenLDAP source build
+        id: restore-openldap-freebsd
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
+          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v1
+
+      - name: Start FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '15.1'
+          usesh: true
+          sync: nfs
+          envs: >-
+            OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
+            OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
+            BERKELEY_DB_SHA256 OPENLDAP_PREFIX
+          prepare: |
+            pkg install -y \
+              bash \
+              curl \
+              cyrus-sasl \
+              gmake \
+              groff \
+              libltdl \
+              p5-Clone \
+              p5-Convert-ASN1 \
+              p5-Devel-Cover \
+              p5-File-Find-Rule \
+              p5-File-Slurp \
+              p5-IO-Stringy \
+              p5-JSON-MaybeXS \
+              p5-List-MoreUtils \
+              p5-Module-Runtime \
+              p5-Moose \
+              p5-Path-Class \
+              p5-Test-Differences \
+              p5-YAML-Syck \
+              perl5
+
+      - name: Build OpenLDAP from source in FreeBSD
+        if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
+        shell: freebsd {0}
+        run: |
+          set -eu
+
+          export PATH="$OPENLDAP_PREFIX/bin:$OPENLDAP_PREFIX/sbin:/usr/local/bin:$PATH"
+          export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
+          rm -rf "$OPENLDAP_PREFIX"
+          mkdir -p "$OPENLDAP_PREFIX"
+
+          openldap_archive="/tmp/openldap-$OPENLDAP_VERSION.tgz"
+          curl --fail --location --silent --show-error \
+            "https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-$OPENLDAP_VERSION.tgz" \
+            --output "$openldap_archive"
+          test "$(sha256 -q "$openldap_archive")" = "$OPENLDAP_SHA256"
+
+          if [ "$OPENLDAP_BACKEND" = bdb ]; then
+            berkeley_db_archive="/tmp/db-$BERKELEY_DB_VERSION.tar.gz"
+            curl --fail --location --silent --show-error \
+              "https://download.oracle.com/berkeley-db/db-$BERKELEY_DB_VERSION.tar.gz" \
+              --output "$berkeley_db_archive"
+            test "$(sha256 -q "$berkeley_db_archive")" = "$BERKELEY_DB_SHA256"
+
+            rm -rf /tmp/net-ldapapi-berkeley-db
+            mkdir -p /tmp/net-ldapapi-berkeley-db
+            tar -xzf "$berkeley_db_archive" \
+              --strip-components=1 \
+              -C /tmp/net-ldapapi-berkeley-db
+            cd /tmp/net-ldapapi-berkeley-db/build_unix
+            CFLAGS='-O2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types' \
+              ../dist/configure \
+                --prefix="$OPENLDAP_PREFIX" \
+                --disable-shared \
+                --disable-cxx
+            gmake -j2
+            gmake install
+          fi
+
+          openldap_source="/tmp/openldap-$OPENLDAP_VERSION"
+          rm -rf "$openldap_source"
+          mkdir -p "$openldap_source"
+          tar -xzf "$openldap_archive" \
+            --strip-components=1 \
+            -C "$openldap_source"
+          cd "$openldap_source"
+
+          if grep -q '^#elif LDAP_PVT_THREAD_STACK_SIZE == 0' \
+            include/ldap_pvt_thread.h; then
+            perl -pi -e \
+              's/\( 1 \* 1024 \* 1024 \* sizeof\(void \*\) \)/8388608/' \
+              include/ldap_pvt_thread.h
+          fi
+          perl -pi -e \
+            's/^#elif defined\( MAXHOSTNAMELEN$/#elif defined( MAXHOSTNAMELEN )/' \
+            libraries/libldap/os-ip.c
+
+          configure_args="--prefix=$OPENLDAP_PREFIX --with-cyrus-sasl --without-tls --disable-modules"
+          if [ "$OPENLDAP_BACKEND" = bdb ]; then
+            configure_args="$configure_args --enable-bdb=yes --disable-hdb"
+          else
+            configure_args="$configure_args --enable-mdb=yes --disable-bdb --disable-hdb"
+          fi
+          if [ "$OPENLDAP_SYNCPROV" = true ]; then
+            configure_args="$configure_args --enable-syncprov=yes"
+          fi
+          if [ "$OPENLDAP_SSSVLV" = true ]; then
+            configure_args="$configure_args --enable-sssvlv=yes"
+          fi
+
+          CPPFLAGS="-I$OPENLDAP_PREFIX/include -I/usr/local/include" \
+            LDFLAGS="-L$OPENLDAP_PREFIX/lib -L/usr/local/lib" \
+            CFLAGS='-O2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types' \
+            ./configure $configure_args
+          gmake depend
+          gmake -j2
+          gmake install
+
+      - name: Save FreeBSD OpenLDAP source build
+        if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
+          key: ${{ steps.restore-openldap-freebsd.outputs.cache-primary-key }}
+
+      - name: Install Cucumber 0.34 and build Net::LDAPapi in FreeBSD
+        shell: freebsd {0}
+        run: |
+          set -eu
+
+          export PATH="$OPENLDAP_PREFIX/bin:$OPENLDAP_PREFIX/sbin:/usr/local/bin:$PATH"
+          export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
+          "$OPENLDAP_PREFIX/libexec/slapd" -VV \
+            >/tmp/slapd-version.txt 2>&1 || true
+          cat /tmp/slapd-version.txt
+          grep -F "$OPENLDAP_VERSION" /tmp/slapd-version.txt
+
+          perl_prefix=/tmp/net-ldapapi-perl5
+          rm -rf "$perl_prefix"
+          mkdir -p "$perl_prefix"
+          export PATH="$perl_prefix/bin:$PATH"
+          export PERL5LIB="$perl_prefix/lib/perl5"
+
+          number_range_archive=/tmp/Number-Range-0.12.tar.gz
+          curl --fail --location --silent --show-error \
+            https://cpan.metacpan.org/authors/id/L/LA/LARRYSH/Number-Range-0.12.tar.gz \
+            --output "$number_range_archive"
+          test "$(sha256 -q "$number_range_archive")" = \
+            433e821ac44ab6164c7e92b60ff7afa60a279bc550134c82ceb70b3ef4ee2925
+          rm -rf /tmp/Number-Range-0.12
+          tar -xzf "$number_range_archive" -C /tmp
+          cd /tmp/Number-Range-0.12
+          perl Makefile.PL INSTALL_BASE="$perl_prefix"
+          gmake install
+          perl -MNumber::Range -e \
+            'die "Expected Number::Range 0.12, found $Number::Range::VERSION\n" if $Number::Range::VERSION ne "0.12"'
+
+          cucumber_archive=/tmp/Test-BDD-Cucumber-0.34.tar.gz
+          curl --fail --location --silent --show-error \
+            https://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.34.tar.gz \
+            --output "$cucumber_archive"
+          test "$(sha256 -q "$cucumber_archive")" = \
+            be3184806292a9bf2d24c284ad76180b372221d0de0969decdb797236a3250b7
+          rm -rf /tmp/Test-BDD-Cucumber-0.34
+          tar -xzf "$cucumber_archive" -C /tmp
+          cd /tmp/Test-BDD-Cucumber-0.34
+          perl Makefile.PL INSTALL_BASE="$perl_prefix"
+          gmake install
+          perl -MTest::BDD::Cucumber -e \
+            'die "Expected Test::BDD::Cucumber 0.34, found $Test::BDD::Cucumber::VERSION\n" if $Test::BDD::Cucumber::VERSION ne "0.34"'
+
+          work_dir=/tmp/net-ldapapi-work
+          rm -rf "$work_dir"
+          mkdir -p "$work_dir"
+          cp -R "$GITHUB_WORKSPACE/." "$work_dir/"
+          cd "$work_dir"
+
+          perl -pi -e \
+            's/\$VERSION = \x273\.0\.x\x27;/\$VERSION = \x273.000999\x27;/' \
+            LDAPapi.pm
+          grep -F "\$VERSION = '3.000999';" LDAPapi.pm
+
+          perl Makefile.PL \
+            -sdk openldap \
+            -include_path "$OPENLDAP_PREFIX/include" \
+            -lib_path "$OPENLDAP_PREFIX/lib" \
+            -sasl_include_path /usr/local/include/sasl
+          gmake
+
+      - name: Run full Cucumber suite in FreeBSD
+        shell: freebsd {0}
+        run: |
+          set -eu
+
+          perl_prefix=/tmp/net-ldapapi-perl5
+          work_dir=/tmp/net-ldapapi-work
+          export PATH="$perl_prefix/bin:$OPENLDAP_PREFIX/bin:$OPENLDAP_PREFIX/sbin:/usr/local/bin:$PATH"
+          export PERL5LIB="$perl_prefix/lib/perl5"
+          export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
+          export HOME=/tmp/net-ldapapi-home
+          cd "$work_dir"
+
+          results_dir="$GITHUB_WORKSPACE/.ci-results"
+          result_file="$results_dir/freebsd-$OPENLDAP_VERSION.tsv"
+          status_file="$results_dir/freebsd-$OPENLDAP_VERSION.status"
+          mkdir -p "$results_dir" "$HOME"
+          rm -f "$result_file" "$status_file"
+
+          cat > "$HOME/.net-ldapapi-test-config.conf" <<'PERL'
+          $RunDeveloperTests = 1;
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-host'} = '127.0.0.1';
+          $TestConfig{'ldap'}{'server'}{'tcp'}{'-port'} = 39010;
+          $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
+          1;
+          PERL
+
+          slapd_conf=/tmp/net-ldapapi-slapd.conf
+          cp t/ldap/slapd.conf "$slapd_conf"
+          schema_dir="$OPENLDAP_PREFIX/etc/openldap/schema"
+          test -r "$schema_dir/core.schema"
+          test -r "$schema_dir/cosine.schema"
+          test -r "$schema_dir/inetorgperson.schema"
+          perl -pi -e "s#/etc/ldap/schema/#$schema_dir/#g" "$slapd_conf"
+          perl -ni -e 'print unless /^module(?:path|load)[[:space:]]/' "$slapd_conf"
+          if [ "$OPENLDAP_BACKEND" = bdb ]; then
+            perl -pi -e 's/^database[[:space:]]+mdb$/database        bdb/' \
+              "$slapd_conf"
+            perl -ni -e 'print unless /^maxsize[[:space:]]/' "$slapd_conf"
+          fi
+          if [ "$OPENLDAP_SYNCPROV" != true ]; then
+            perl -ni -e 'print unless /^overlay[[:space:]]+syncprov$/' \
+              "$slapd_conf"
+          fi
+          if [ "$OPENLDAP_SSSVLV" != true ]; then
+            perl -ni -e 'print unless /^overlay[[:space:]]+sssvlv$/' \
+              "$slapd_conf"
+          fi
+
+          rm -rf /tmp/net-ldapapi-slapd-data /tmp/net-ldapapi-ldapi
+          mkdir -p /tmp/net-ldapapi-slapd-data
+          "$OPENLDAP_PREFIX/sbin/slaptest" -f "$slapd_conf" -u
+          "$OPENLDAP_PREFIX/sbin/slapadd" \
+            -f "$slapd_conf" \
+            -l t/ldap/bootstrap.ldif
+
+          "$OPENLDAP_PREFIX/libexec/slapd" \
+            -f "$slapd_conf" \
+            -h 'ldap://127.0.0.1:39010/ ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/' \
+            >/tmp/net-ldapapi-slapd.log 2>&1 &
+          slapd_pid=$!
+
+          cleanup() {
+            kill "$slapd_pid" 2>/dev/null || true
+            wait "$slapd_pid" 2>/dev/null || true
+            cat /tmp/net-ldapapi-slapd.log || true
+          }
+          trap cleanup EXIT
+
+          attempt=0
+          while [ "$attempt" -lt 30 ]; do
+            if "$OPENLDAP_PREFIX/bin/ldapsearch" -LLL -x \
+              -H ldap://127.0.0.1:39010 \
+              -D cn=admin,dc=example,dc=com \
+              -w password \
+              -b dc=example,dc=com \
+              -s base dn \
+              >/tmp/net-ldapapi-smoke.out \
+              2>/tmp/net-ldapapi-smoke.err; then
+              break
+            fi
+            attempt=$((attempt + 1))
+            sleep 1
+          done
+          cat /tmp/net-ldapapi-smoke.out
+          test -s /tmp/net-ldapapi-smoke.out
+
+          CUCUMBER_SKIP_FEATURES=''
+          if [ "$OPENLDAP_SYNCPROV" != true ]; then
+            CUCUMBER_SKIP_FEATURES='syncrepl.feature'
+          fi
+          if [ "$OPENLDAP_SSSVLV" != true ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
+          fi
+          export CUCUMBER_SKIP_FEATURES
+          export CUCUMBER_RESULTS_FILE="$result_file"
+          export CUCUMBER_TIMEOUT_SECONDS=300
+
+          set +e
+          t/ci/run-cucumber-features.sh
+          suite_status=$?
+          set -e
+          printf '%s\n' "$suite_status" > "$status_file"
+
+      - name: Upload FreeBSD Cucumber feature results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-results-freebsd-${{ matrix.openldap.version }}
+          path: .ci-results/freebsd-${{ matrix.openldap.version }}.tsv
+          if-no-files-found: ignore
+
+      - name: Enforce FreeBSD Cucumber result
+        if: ${{ always() }}
+        run: |
+          status_file=".ci-results/freebsd-${{ matrix.openldap.version }}.status"
+          if [ ! -s "$status_file" ]; then
+            echo 'FreeBSD test run did not record a Cucumber status' >&2
+            exit 1
+          fi
+          test "$(cat "$status_file")" -eq 0
+
   summarize:
     name: Summarize source-build matrix
     if: ${{ always() }}
-    needs: cucumber
+    needs:
+      - cucumber
+      - cucumber_freebsd
     runs-on: ubuntu-latest
     steps:
       - name: Download Cucumber feature results
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
-          pattern: cucumber-results-source-*
+          pattern: cucumber-results-*
           path: cucumber-results
           merge-multiple: true
 
@@ -508,12 +853,21 @@ jobs:
             );
 
             const results = jobs.flatMap((job) => {
-              const match = job.name.match(
+              const debianMatch = job.name.match(
                 /^OpenLDAP ([0-9.]+) \(source on Debian (Wheezy|Jessie)\)$/,
               );
-              if (!match) {
+              const freebsdMatch = job.name.match(
+                /^OpenLDAP ([0-9.]+) \(source on FreeBSD 15\.1\)$/,
+              );
+              if (!debianMatch && !freebsdMatch) {
                 return [];
               }
+
+              const version = debianMatch ? debianMatch[1] : freebsdMatch[1];
+              const platform = debianMatch ? debianMatch[2] : 'FreeBSD 15.1';
+              const resultKey = debianMatch
+                ? `source-${version}-${platform.toLowerCase()}`
+                : `freebsd-${version}`;
 
               const failedStep = (job.steps || []).find(
                 (step) => !['success', 'skipped'].includes(step.conclusion),
@@ -522,7 +876,7 @@ jobs:
                 ? 'PASS'
                 : (job.conclusion || 'unknown').toUpperCase();
               const cucumberResults = cucumberResultsByLane.get(
-                `source-${match[1]}-${match[2].toLowerCase()}`,
+                resultKey,
               ) || [];
               const featureFailures = cucumberResults.filter(
                 (item) => item.status === 'FAIL',
@@ -550,8 +904,8 @@ jobs:
                   : 'Workflow failed before a Cucumber feature result was recorded');
 
               return [{
-                version: match[1],
-                debian: match[2],
+                version,
+                platform,
                 result,
                 failedWorkflowStep,
                 failedFeature,
@@ -567,12 +921,12 @@ jobs:
                 right,
                 undefined,
                 { numeric: true },
-              ));
+            ));
             const resultByLane = new Map(
-              results.map((item) => [`${item.version}:${item.debian}`, item]),
+              results.map((item) => [`${item.version}:${item.platform}`, item]),
             );
-            const matrixCell = (version, debian) => {
-              const item = resultByLane.get(`${version}:${debian}`);
+            const matrixCell = (version, platform) => {
+              const item = resultByLane.get(`${version}:${platform}`);
               if (!item) {
                 return 'NOT REPORTED';
               }
@@ -595,10 +949,10 @@ jobs:
               '',
               `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              '| OpenLDAP | Debian Wheezy | Debian Jessie |',
-              '|---|---|---|',
+              '| OpenLDAP | Debian Wheezy | Debian Jessie | FreeBSD 15.1 |',
+              '|---|---|---|---|',
               ...versions.map((version) => (
-                `| ${version} | ${escapeCell(matrixCell(version, 'Wheezy'))} | ${escapeCell(matrixCell(version, 'Jessie'))} |`
+                `| ${version} | ${escapeCell(matrixCell(version, 'Wheezy'))} | ${escapeCell(matrixCell(version, 'Jessie'))} | ${escapeCell(matrixCell(version, 'FreeBSD 15.1'))} |`
               )),
             ];
             lines.push(
@@ -612,7 +966,7 @@ jobs:
                 '',
                 '## Failed lanes',
                 '',
-                '| OpenLDAP | Debian | Result | Failed workflow step | Failed feature | Failed scenario step | Detail | Job |',
+                '| OpenLDAP | Platform | Result | Failed workflow step | Failed feature | Failed scenario step | Detail | Job |',
                 '|---|---|---|---|---|---|---|---|',
                 ...failures
                   .sort((left, right) => (
@@ -620,11 +974,11 @@ jobs:
                       right.version,
                       undefined,
                       { numeric: true },
-                    ) || left.debian.localeCompare(right.debian)
+                    ) || left.platform.localeCompare(right.platform)
                   ))
                   .map((item) => [
                     `| ${item.version}`,
-                    item.debian,
+                    item.platform,
                     item.result,
                     escapeCell(item.failedWorkflowStep || '-'),
                     escapeCell(item.failedFeature || '-'),

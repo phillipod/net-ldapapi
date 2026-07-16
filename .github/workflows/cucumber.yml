@@ -29,7 +29,7 @@ jobs:
             expected_openldap: 2.4.40
             debian_archive: true
             debian_suite: jessie
-            cucumber_from_cpan: false
+            cucumber_from_cpan: true
           - name: OpenLDAP 2.5.13 (Debian Bookworm)
             image: debian:bookworm
             expected_openldap: 2.5.13
@@ -81,11 +81,18 @@ jobs:
             if [ "$CUCUMBER_FROM_CPAN" = "true" ]; then
               cucumber_packages=(
                 curl
+                libclone-perl
+                libfile-find-rule-perl
+                libfile-slurp-perl
                 libio-stringy-perl
                 libjson-pp-perl
                 libjson-xs-perl
+                liblist-moreutils-perl
+                libmoose-perl
                 libnumber-range-perl
-                libtest-bdd-cucumber-perl
+                libpath-class-perl
+                libtest-differences-perl
+                libyaml-syck-perl
               )
             fi
 
@@ -123,28 +130,32 @@ jobs:
           fi
 
           if [ "$CUCUMBER_FROM_CPAN" = "true" ]; then
-            printf '%s\n' \
-              'deb http://archive.debian.org/debian jessie main' \
-              > /etc/apt/sources.list.d/jessie.list
-            apt-get -o Acquire::Check-Valid-Until=false update
+            if [ "$DEBIAN_SUITE" = "wheezy" ]; then
+              printf '%s\n' \
+                'deb http://archive.debian.org/debian jessie main' \
+                > /etc/apt/sources.list.d/jessie.list
+              apt-get -o Acquire::Check-Valid-Until=false update
+            fi
             apt-get -o Acquire::Check-Valid-Until=false \
               --allow-unauthenticated \
               install -y --no-install-recommends \
               libjson-maybexs-perl=1.002006-1 \
               libjson-pp-perl=2.27300-2
             curl --fail --location --silent --show-error \
-              http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.31.tar.gz \
-              --output /tmp/Test-BDD-Cucumber-0.31.tar.gz
+              http://cpan.metacpan.org/authors/id/S/SA/SARGIE/Test-BDD-Cucumber-0.34.tar.gz \
+              --output /tmp/Test-BDD-Cucumber-0.34.tar.gz
             printf '%s  %s\n' \
-              a24b32986256b2bc5235d5d354ef76f841b2ec8ec49b0053564aad959c98999a \
-              /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              be3184806292a9bf2d24c284ad76180b372221d0de0969decdb797236a3250b7 \
+              /tmp/Test-BDD-Cucumber-0.34.tar.gz \
               | sha256sum --check
             tar --extract --gzip \
-              --file /tmp/Test-BDD-Cucumber-0.31.tar.gz \
+              --file /tmp/Test-BDD-Cucumber-0.34.tar.gz \
               --directory /tmp
-            cd /tmp/Test-BDD-Cucumber-0.31
+            cd /tmp/Test-BDD-Cucumber-0.34
             perl Makefile.PL
             make install
+            perl -MTest::BDD::Cucumber -e \
+              'die "Expected Test::BDD::Cucumber 0.34, found $Test::BDD::Cucumber::VERSION\n" if $Test::BDD::Cucumber::VERSION ne "0.34"'
             cd /work
           fi
 

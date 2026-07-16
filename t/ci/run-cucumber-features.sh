@@ -36,71 +36,10 @@ locate_failed_step() {
   local feature_file="$1"
   local log_file="$2"
 
-  perl - "$feature_file" "$log_file" <<'PERL'
-use strict;
-use warnings;
-
-my ($feature_file, $log_file) = @ARGV;
-open my $log, '<', $log_file or die "Cannot read $log_file: $!";
-my $failed_step_index;
-my $last_step_index;
-while (my $line = <$log>) {
-  $line =~ s/\e\[[0-9;]*[[:alpha:]]//g;
-  if ($line =~ /^\s*(ok|not[ ]ok)\s+(\d+)\s+-\s+
-      (Given|When|Then|And|But|\*)\s+/x) {
-    $last_step_index = $2;
-    if ($1 eq 'not ok' && !defined $failed_step_index) {
-      $failed_step_index = $2;
-    }
-  }
-}
-close $log;
-
-open my $feature, '<', $feature_file
-  or die "Cannot read $feature_file: $!";
-my @background;
-my @scenarios;
-my $section = '';
-while (my $line = <$feature>) {
-  if ($line =~ /^\s*Background:/) {
-    $section = 'background';
-    next;
-  }
-  if ($line =~ /^\s*Scenario(?: Outline)?:\s*(.*?)\s*$/) {
-    push @scenarios, { name => $1, steps => [] };
-    $section = 'scenario';
-    next;
-  }
-  next unless $line =~ /^\s*(Given|When|Then|And|But|\*)\s+(.*?)\s*$/;
-  my $step = "$1 $2";
-  if ($section eq 'background') {
-    push @background, $step;
-  } elsif ($section eq 'scenario' && @scenarios) {
-    push @{$scenarios[-1]{steps}}, $step;
-  }
-}
-close $feature;
-
-my @execution;
-for my $scenario (@scenarios) {
-  push @execution, map {
-    { scenario => $scenario->{name}, step => $_ }
-  } (@background, @{$scenario->{steps}});
+  perl t/ci/locate-cucumber-failure.pl "$feature_file" "$log_file"
 }
 
-my $location;
-if (defined $failed_step_index) {
-  $location = $execution[$failed_step_index - 1];
-} elsif (defined $last_step_index) {
-  $location = $execution[$last_step_index];
-}
-if ($location) {
-  print "$location->{scenario}\t$location->{step}\n";
-}
-PERL
-}
-
-find t/features -maxdepth 1 -type f -name '*.feature' \
+find t/features -type f -name '*.feature' \
   ! -name 'syncrepl.feature' | sort \
   > /tmp/net-ldapapi-features.txt
 if [ -f t/features/syncrepl.feature ]; then
@@ -130,8 +69,8 @@ while IFS= read -r feature_file; do
 
   log_file="/tmp/net-ldapapi-${feature_name%.feature}.log"
   echo "::group::${feature_file}"
-  timeout --kill-after=5s "${timeout_seconds}s" \
-    prove -lv t/01-bdd-cucumber.t :: "$feature_file" 2>&1 \
+  timeout -k 5s "${timeout_seconds}s" \
+    prove -blv t/01-bdd-cucumber.t :: "$feature_file" 2>&1 \
     | tee "$log_file"
   feature_status="${PIPESTATUS[0]}"
 
@@ -182,7 +121,7 @@ while IFS= read -r feature_file; do
     fi
 
     if [ -z "$failed_step" ]; then
-      failed_step='Cucumber process terminated before reporting the step'
+      failed_step='Cucumber harness failed while no Gherkin step was active'
     fi
     echo "::error file=${feature_file}::${failed_step} (${detail})"
     record_result FAIL "$feature_name" "$scenario" "$failed_step" "$detail"
