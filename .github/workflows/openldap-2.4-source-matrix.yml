@@ -496,7 +496,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
-          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v2
+          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v3
 
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
@@ -601,7 +601,7 @@ jobs:
             's/^#elif defined\( MAXHOSTNAMELEN$/#elif defined( MAXHOSTNAMELEN )/' \
             libraries/libldap/os-ip.c
 
-          configure_args="--prefix=$OPENLDAP_PREFIX --with-cyrus-sasl --without-tls --disable-modules"
+          configure_args="--prefix=$OPENLDAP_PREFIX --with-cyrus-sasl --without-tls --disable-modules --enable-shared=yes --enable-static=yes"
           if [ "$OPENLDAP_BACKEND" = bdb ]; then
             configure_args="$configure_args --enable-bdb=yes --disable-hdb"
           else
@@ -616,13 +616,15 @@ jobs:
 
           CPPFLAGS="-I$OPENLDAP_PREFIX/include -I/usr/local/include" \
             LDFLAGS="-L$OPENLDAP_PREFIX/lib -L/usr/local/lib" \
-            CFLAGS='-O2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types' \
+            CFLAGS='-O2 -fPIC -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types' \
             ./configure $configure_args
           gmake depend
           gmake -j2
           gmake install
 
           test -x "$OPENLDAP_PREFIX/libexec/slapd"
+          ls "$OPENLDAP_PREFIX"/lib/libldap*.so* \
+            "$OPENLDAP_PREFIX"/lib/liblber*.so*
           tar -czf "$OPENLDAP_CACHE_ARCHIVE" -C "$OPENLDAP_PREFIX" .
 
       - name: Save FreeBSD OpenLDAP source build
