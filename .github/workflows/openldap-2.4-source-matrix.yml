@@ -15,9 +15,6 @@ permissions:
 
 env:
   LDAPAPI_CI_DEBUG: ${{ inputs.ldapapi_ci_debug }}
-  # These versions bracket the cross-platform SyncRepl failures without
-  # multiplying the already-large historical source-build matrix.
-  SYNCPROBE_OPENLDAP_VERSIONS: '2.4.6 2.4.31 2.4.32 2.4.40 2.4.42'
 
 jobs:
   cucumber:
@@ -315,7 +312,6 @@ jobs:
             --env OPENLDAP_SSSVLV="$OPENLDAP_SSSVLV" \
             --env OPENLDAP_SERVER_CONTROLS_SKIP_REASON="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" \
             --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
-            --env SYNCPROBE_OPENLDAP_VERSIONS="$SYNCPROBE_OPENLDAP_VERSIONS" \
             --env SYNCPROBE_RESULT_FILE="$syncrepl_probe_result_file" \
             --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
             "$IMAGE" \
@@ -572,16 +568,12 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
-          case " $SYNCPROBE_OPENLDAP_VERSIONS " in
-            *" $OPENLDAP_VERSION "*)
-              export OPENLDAP_PREFIX=/opt/openldap
-              export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
-              export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
-              bash t/ci/run-syncrepl-c-sdk-probe.sh
-              cat "$SYNCPROBE_RESULTS_FILE"
-              tail -n 120 "$SYNCPROBE_LOG_FILE"
-              ;;
-          esac
+          export OPENLDAP_PREFIX=/opt/openldap
+          export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
+          export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
+          bash t/ci/run-syncrepl-c-sdk-probe.sh
+          cat "$SYNCPROBE_RESULTS_FILE"
+          tail -n 120 "$SYNCPROBE_LOG_FILE"
 
           CUCUMBER_SKIP_FEATURES=''
           CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
@@ -673,7 +665,7 @@ jobs:
             OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
             OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
-            LDAPAPI_CI_DEBUG SYNCPROBE_OPENLDAP_VERSIONS
+            LDAPAPI_CI_DEBUG
             OPENLDAP_SERVER_CONTROLS_SKIP_REASON
           prepare: |
             pkg install -y \
@@ -1064,16 +1056,12 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
-          case " $SYNCPROBE_OPENLDAP_VERSIONS " in
-            *" $OPENLDAP_VERSION "*)
-              export SYNCPROBE_RESULTS_FILE="$syncrepl_probe_result_file"
-              export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
-              export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
-              bash t/ci/run-syncrepl-c-sdk-probe.sh
-              cat "$SYNCPROBE_RESULTS_FILE"
-              tail -n 120 "$SYNCPROBE_LOG_FILE"
-              ;;
-          esac
+          export SYNCPROBE_RESULTS_FILE="$syncrepl_probe_result_file"
+          export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
+          export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
+          bash t/ci/run-syncrepl-c-sdk-probe.sh
+          cat "$SYNCPROBE_RESULTS_FILE"
+          tail -n 120 "$SYNCPROBE_LOG_FILE"
 
           CUCUMBER_SKIP_FEATURES=''
           CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
@@ -1204,11 +1192,6 @@ jobs:
                 );
               }
             }
-            const syncreplProbeVersions = new Set(
-              (process.env.SYNCPROBE_OPENLDAP_VERSIONS || '')
-                .split(/\s+/)
-                .filter(Boolean),
-            );
             const jobs = await github.paginate(
               github.rest.actions.listJobsForWorkflowRun,
               {
@@ -1350,7 +1333,6 @@ jobs:
             );
 
             const syncreplProbeResults = results
-              .filter((item) => syncreplProbeVersions.has(item.version))
               .map((item) => ({
                 ...item,
                 probe: syncreplProbeResultsByLane.get(item.resultKey),
@@ -1376,18 +1358,15 @@ jobs:
                   item.probe.detail,
                 ].filter(Boolean).join(' - ');
               };
-              const probeVersions = [...syncreplProbeVersions].sort((left, right) => (
-                left.localeCompare(right, undefined, { numeric: true })
-              ));
               lines.push(
                 '',
                 '## Direct OpenLDAP C SDK SyncRepl probe',
                 '',
-                'This selected-version probe uses the same bind, persistent Sync Request, mutations, polling, and Cancel sequence as `syncrepl.feature`, without the Perl/XS layer.',
+                'This probe runs in every historical source-build cell and uses the same bind, persistent Sync Request, mutations, polling, and Cancel sequence as `syncrepl.feature`, without the Perl/XS layer.',
                 '',
                 `| OpenLDAP | ${platforms.join(' | ')} |`,
                 `|---|${platforms.map(() => '---').join('|')}|`,
-                ...probeVersions.map((version) => (
+                ...versions.map((version) => (
                   `| ${version} | ${platforms.map((platform) => (
                     escapeCell(syncreplProbeCell(version, platform))
                   )).join(' | ')} |`
