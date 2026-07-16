@@ -141,15 +141,21 @@ jobs:
       - name: Run full Cucumber suite
         env:
           OPENLDAP_CACHE_DIR: .cache/openldap/nightly/${{ matrix.openldap.cache_id }}
+          OPENLDAP_CACHE_ID: ${{ matrix.openldap.cache_id }}
           OPENLDAP_SOURCE: ${{ matrix.openldap.source }}
           OPENLDAP_VERSION: ${{ matrix.openldap.version }}
         run: |
+          result_dir="$RUNNER_TEMP/cucumber-results"
+          result_file="nightly-$OPENLDAP_CACHE_ID.tsv"
+          mkdir -p "$result_dir"
           docker run --rm --interactive \
             --volume "$PWD:/src:ro" \
             --volume "$PWD/$OPENLDAP_CACHE_DIR:/opt/openldap:ro" \
+            --volume "$result_dir:/results" \
             --workdir /work \
             --env OPENLDAP_SOURCE="$OPENLDAP_SOURCE" \
             --env OPENLDAP_VERSION="$OPENLDAP_VERSION" \
+            --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
             debian:trixie \
             bash -s <<'EOF'
           set -euxo pipefail
@@ -240,30 +246,16 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
-          suite_status=0
-          find t/features -maxdepth 1 -type f -name '*.feature' \
-            ! -name 'syncrepl.feature' | sort \
-            > /tmp/net-ldapapi-features.txt
-          printf '%s\n' t/features/syncrepl.feature \
-            >> /tmp/net-ldapapi-features.txt
-          while IFS= read -r feature_file; do
-            echo "::group::${feature_file}"
-            set +e
-            timeout --kill-after=5s 180s \
-              prove -lv t/01-bdd-cucumber.t :: "$feature_file"
-            feature_status="$?"
-            set -e
-            if [ "$feature_status" -ne 0 ]; then
-              suite_status=1
-              if [ "$feature_status" -eq 124 ]; then
-                echo "::error file=${feature_file}::Feature timed out after 180 seconds"
-              fi
-            fi
-            echo "::endgroup::"
-          done < /tmp/net-ldapapi-features.txt
-
-          exit "$suite_status"
+          t/ci/run-cucumber-features.sh
           EOF
+
+      - name: Upload Cucumber feature results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-results-nightly-${{ matrix.openldap.cache_id }}
+          path: ${{ runner.temp }}/cucumber-results/nightly-${{ matrix.openldap.cache_id }}.tsv
+          if-no-files-found: ignore
 
   summarize:
     name: Summarize nightly source matrix
@@ -271,12 +263,36 @@ jobs:
     needs: cucumber
     runs-on: ubuntu-latest
     steps:
+      - name: Download Cucumber feature results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cucumber-results-nightly-*
+          path: cucumber-results
+          merge-multiple: true
+
       - name: Publish pass/fail matrix
         id: matrix-summary
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
+            const failuresByLane = new Map();
+            if (fs.existsSync('cucumber-results')) {
+              for (const file of fs.readdirSync('cucumber-results')) {
+                if (!file.endsWith('.tsv')) {
+                  continue;
+                }
+                const failures = fs.readFileSync(
+                  `cucumber-results/${file}`,
+                  'utf8',
+                ).trim().split('\n').filter(Boolean).map((line) => {
+                  const [status, feature, scenario, step, detail] = line.split('\t');
+                  return { status, feature, scenario, step, detail };
+                }).filter((item) => item.status === 'FAIL');
+                failuresByLane.set(file.replace(/\.tsv$/, ''), failures);
+              }
+            }
             const jobs = await github.paginate(
               github.rest.actions.listJobsForWorkflowRun,
               {
@@ -301,11 +317,36 @@ jobs:
               const result = job.conclusion === 'success'
                 ? 'PASS'
                 : (job.conclusion || 'unknown').toUpperCase();
+              const resultKey = match[1].replace(/ LTS$/, '');
+              const featureFailures = failuresByLane.get(
+                `nightly-${resultKey}`,
+              ) || [];
+              const failedFeature = featureFailures.length
+                ? featureFailures.map((item) => item.feature).join('<br>')
+                : '';
+              const failedScenarioStep = featureFailures.length
+                ? featureFailures.map((item) => (
+                  item.scenario
+                    ? `${item.scenario}: ${item.step}`
+                    : item.step
+                )).join('<br>')
+                : '';
+              const failedWorkflowStep = featureFailures.length
+                ? ''
+                : (failedStep ? failedStep.name : '');
+              const failureDetail = featureFailures.length
+                ? featureFailures.map((item) => item.detail).join('<br>')
+                : (result === 'PASS'
+                  ? ''
+                  : 'Workflow failed before a Cucumber feature result was recorded');
 
               return [{
                 lane: match[1],
                 result,
-                failedStep: failedStep ? failedStep.name : '',
+                failedWorkflowStep,
+                failedFeature,
+                failedScenarioStep,
+                failureDetail,
                 url: job.html_url,
               }];
             });
@@ -320,12 +361,15 @@ jobs:
               '',
               `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              '| OpenLDAP source | Result | Failed step | Job |',
-              '|---|---|---|---|',
+              '| OpenLDAP source | Result | Failed workflow step | Failed feature | Failed scenario step | Detail | Job |',
+              '|---|---|---|---|---|---|---|',
               ...results.map((item) => [
                 `| ${item.lane}`,
                 item.result,
-                escapeCell(item.failedStep || '-'),
+                escapeCell(item.failedWorkflowStep || '-'),
+                escapeCell(item.failedFeature || '-'),
+                escapeCell(item.failedScenarioStep || '-'),
+                escapeCell(item.failureDetail || '-'),
                 `[logs](${item.url}) |`,
               ].join(' | ')),
             ];

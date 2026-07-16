@@ -53,13 +53,18 @@ jobs:
           DEBIAN_SUITE: ${{ matrix.debian_suite }}
           CUCUMBER_FROM_CPAN: ${{ matrix.cucumber_from_cpan }}
         run: |
+          result_dir="$RUNNER_TEMP/cucumber-results"
+          result_file="binary-$EXPECTED_OPENLDAP.tsv"
+          mkdir -p "$result_dir"
           docker run --rm --interactive \
             --volume "$PWD:/src:ro" \
+            --volume "$result_dir:/results" \
             --workdir /work \
             --env EXPECTED_OPENLDAP="$EXPECTED_OPENLDAP" \
             --env DEBIAN_ARCHIVE="$DEBIAN_ARCHIVE" \
             --env DEBIAN_SUITE="$DEBIAN_SUITE" \
             --env CUCUMBER_FROM_CPAN="$CUCUMBER_FROM_CPAN" \
+            --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
             "$IMAGE" \
             bash -s <<'EOF'
           set -euxo pipefail
@@ -197,19 +202,16 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
-          suite_status=0
-          find t/features -maxdepth 1 -type f -name '*.feature' | sort \
-            > /tmp/net-ldapapi-features.txt
-          while IFS= read -r feature_file; do
-            echo "::group::${feature_file}"
-            if ! prove -lv t/01-bdd-cucumber.t :: "$feature_file"; then
-              suite_status=1
-            fi
-            echo "::endgroup::"
-          done < /tmp/net-ldapapi-features.txt
-
-          exit "$suite_status"
+          t/ci/run-cucumber-features.sh
           EOF
+
+      - name: Upload Cucumber feature results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-results-binary-${{ matrix.expected_openldap }}
+          path: ${{ runner.temp }}/cucumber-results/binary-${{ matrix.expected_openldap }}.tsv
+          if-no-files-found: ignore
 
   summarize:
     name: Summarize compatibility matrix
@@ -217,12 +219,36 @@ jobs:
     needs: cucumber
     runs-on: ubuntu-latest
     steps:
+      - name: Download Cucumber feature results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cucumber-results-binary-*
+          path: cucumber-results
+          merge-multiple: true
+
       - name: Publish pass/fail matrix
         id: matrix-summary
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
+            const failuresByLane = new Map();
+            if (fs.existsSync('cucumber-results')) {
+              for (const file of fs.readdirSync('cucumber-results')) {
+                if (!file.endsWith('.tsv')) {
+                  continue;
+                }
+                const failures = fs.readFileSync(
+                  `cucumber-results/${file}`,
+                  'utf8',
+                ).trim().split('\n').filter(Boolean).map((line) => {
+                  const [status, feature, scenario, step, detail] = line.split('\t');
+                  return { status, feature, scenario, step, detail };
+                }).filter((item) => item.status === 'FAIL');
+                failuresByLane.set(file.replace(/\.tsv$/, ''), failures);
+              }
+            }
             const jobs = await github.paginate(
               github.rest.actions.listJobsForWorkflowRun,
               {
@@ -247,12 +273,36 @@ jobs:
               const result = job.conclusion === 'success'
                 ? 'PASS'
                 : (job.conclusion || 'unknown').toUpperCase();
+              const featureFailures = failuresByLane.get(
+                `binary-${match[1]}`,
+              ) || [];
+              const failedFeature = featureFailures.length
+                ? featureFailures.map((item) => item.feature).join('<br>')
+                : '';
+              const failedScenarioStep = featureFailures.length
+                ? featureFailures.map((item) => (
+                  item.scenario
+                    ? `${item.scenario}: ${item.step}`
+                    : item.step
+                )).join('<br>')
+                : '';
+              const failedWorkflowStep = featureFailures.length
+                ? ''
+                : (failedStep ? failedStep.name : '');
+              const failureDetail = featureFailures.length
+                ? featureFailures.map((item) => item.detail).join('<br>')
+                : (result === 'PASS'
+                  ? ''
+                  : 'Workflow failed before a Cucumber feature result was recorded');
 
               return [{
                 version: match[1],
                 debian: match[2],
                 result,
-                failedStep: failedStep ? failedStep.name : '',
+                failedWorkflowStep,
+                failedFeature,
+                failedScenarioStep,
+                failureDetail,
                 url: job.html_url,
               }];
             }).sort((left, right) => left.version.localeCompare(
@@ -267,13 +317,16 @@ jobs:
               '',
               `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              '| OpenLDAP | Debian | Result | Failed step | Job |',
-              '|---|---|---|---|---|',
+              '| OpenLDAP | Debian | Result | Failed workflow step | Failed feature | Failed scenario step | Detail | Job |',
+              '|---|---|---|---|---|---|---|---|',
               ...results.map((item) => [
                 `| ${item.version}`,
                 item.debian,
                 item.result,
-                escapeCell(item.failedStep || '-'),
+                escapeCell(item.failedWorkflowStep || '-'),
+                escapeCell(item.failedFeature || '-'),
+                escapeCell(item.failedScenarioStep || '-'),
+                escapeCell(item.failureDetail || '-'),
                 `[logs](${item.url}) |`,
               ].join(' | ')),
             ];
