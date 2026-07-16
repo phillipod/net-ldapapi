@@ -20,7 +20,7 @@ jobs:
   cucumber:
     name: OpenLDAP ${{ matrix.openldap.version }} (source on Debian ${{ matrix.debian.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       DEBIAN_TEST_CONTAINER: net-ldapapi-source
     strategy:
@@ -38,6 +38,10 @@ jobs:
             berkeley_db: 4.5.20.NC
             berkeley_db_sha256: 81a0ccdcce1e4a8138656190b3dd9ee76b9f922c15500c271283055838dbd497
             syncprov: true
+            # ITS#7928's syncprov cancellation fix was released in 2.4.40.
+            syncrepl_cancel_skip_reason: &syncrepl_cancel_its7928 >-
+              OpenLDAP source predates the ITS#7928 syncprov cancellation fix
+              (released in 2.4.40)
             sssvlv: false
           - version: 2.4.6
             sha256: e3af73a91c9cf7a78d700c348a55792d65fc945218fe7f3abf9a97acd00ac579
@@ -45,6 +49,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.8
             sha256: 23d9a45241dcf81ab4094c892eafe7111306b31c34387d5c21c9c918d68e5b80
@@ -52,6 +57,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.15
             sha256: ff1211c492b0666e99c617bd9937eceb664c01c3099b2a0b1184b57d2c284aee
@@ -59,6 +65,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.22
             sha256: c29b34031305616cf2c847d30706e2d2cdfc2cf91431e0bddab5d483395a40c1
@@ -66,6 +73,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             # Its sssvlv overlay encodes virtualListViewResult as INTEGER,
             # rather than ENUMERATED (ITS#6685, fixed in 2.4.24).
             sssvlv: true
@@ -76,51 +84,61 @@ jobs:
             sha256: 44e95acab6c94b53723a451bd272c10f4f596f42bf26593ab84bb399d053c1e1
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.31
             sha256: bde845840df4794b869a6efd6a6b1086f80989038e4844b2e4d7d6b57b39c5b6
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.32
             sha256: 9ee413c6a816cb41f71826759b78001d04e747ede9dde302d6ba94ab16f0b82e
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.33
             sha256: 81e9eca20f17a69a5d15ebc4c66a323106da4f4f80a32105bc7cdea333aca14c
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.34
             sha256: eaab4c4a6b09cc9e60f97e6ef9974f8327d977d1d7af7bc00c2bc5f90dfe0606
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.35
             sha256: 16100374c147df0d82a5c52ca60da5eca1a5ea8b5a187467d40a78e3691e9eeb
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.36
             sha256: 05b013faa789f38012aa92e2dc42ac02ea77502302ae7dac5ab225cbe73ce67a
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.37
             sha256: 3808f4e0800345bedf394882acc169d5d0d41cd204d742ffa217cf391fab5723
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.38
             sha256: 88209a3599ec5d9354fc09bbe29b99db1ffa1b612127c06bad0c5265d0b31fd1
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.39
             sha256: 8267c87347103fef56b783b24877c0feda1063d3cb85d070e503d076584bf8a7
             backend: mdb
             syncprov: true
+            syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: true
           - version: 2.4.40
             sha256: d12611a5c25b6499293c2bb7b435dc2b174db73e83f5a8cb7e34f2ce5fa6dadb
@@ -296,6 +314,7 @@ jobs:
           OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
           OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
           OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
+          OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON: ${{ matrix.openldap.syncrepl_cancel_skip_reason }}
           OPENLDAP_CACHE_DIR: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
         run: |
           result_dir="$RUNNER_TEMP/cucumber-results"
@@ -318,6 +337,7 @@ jobs:
             --env OPENLDAP_SYNCPROV="$OPENLDAP_SYNCPROV" \
             --env OPENLDAP_SSSVLV="$OPENLDAP_SSSVLV" \
             --env OPENLDAP_SERVER_CONTROLS_SKIP_REASON="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" \
+            --env OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" \
             --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
             --env SYNCPROBE_RESULT_FILE="$syncrepl_probe_result_file" \
             --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
@@ -513,50 +533,6 @@ jobs:
             exit 1
           fi
 
-      - name: Run C SDK SyncRepl Probe
-        continue-on-error: true
-        env:
-          SYNCPROBE_RESULT_PATH: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
-        run: |
-          set +e
-          docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
-          set -euxo pipefail
-
-          export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
-          export LD_LIBRARY_PATH=/opt/openldap/lib
-          export OPENLDAP_PREFIX=/opt/openldap
-          export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
-          export SYNCPROBE_LOG_FILE="/results/diagnostics-source-$OPENLDAP_VERSION-$DEBIAN_SUITE/syncrepl-c-sdk-probe.log"
-
-          test -s /tmp/net-ldapapi-slapd.pid
-          kill -0 "$(cat /tmp/net-ldapapi-slapd.pid)"
-          bash t/ci/run-syncrepl-c-sdk-probe.sh
-          cat "$SYNCPROBE_RESULTS_FILE"
-          tail -n 120 "$SYNCPROBE_LOG_FILE"
-          test "$(cut -f1 "$SYNCPROBE_RESULTS_FILE")" = PASS
-          EOF
-          probe_status=$?
-          set -e
-          if [ ! -s "$SYNCPROBE_RESULT_PATH" ]; then
-            echo '::error::C SDK probe did not write a result' >&2
-            mkdir -p "$(dirname "$SYNCPROBE_RESULT_PATH")"
-            printf '%s\t%s\t%s\n' \
-              FAIL infrastructure \
-              'the C SDK probe did not write a result' \
-              > "$SYNCPROBE_RESULT_PATH"
-          fi
-          test "$probe_status" -eq 0
-          test "$(cut -f1 "$SYNCPROBE_RESULT_PATH")" = PASS
-
-      - name: Upload direct C SDK SyncRepl probe result
-        if: ${{ always() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
-          path: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
-          if-no-files-found: ignore
-
       - name: Run full Cucumber suite
         timeout-minutes: 15
         env:
@@ -571,8 +547,16 @@ jobs:
           diagnostics_dir="/results/diagnostics-source-$OPENLDAP_VERSION-$DEBIAN_SUITE"
           CUCUMBER_SKIP_FEATURES=''
           CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
+          CUCUMBER_SKIP_REASON_SYNCPROV=''
+          CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL=''
           if [ "$OPENLDAP_SYNCPROV" != true ]; then
-            CUCUMBER_SKIP_FEATURES='syncrepl.feature'
+            CUCUMBER_SKIP_FEATURES='syncrepl.feature syncrepl_cancel.feature'
+            CUCUMBER_SKIP_REASON_SYNCPROV='OpenLDAP source predates the syncprov overlay'
+            CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$CUCUMBER_SKIP_REASON_SYNCPROV"
+          fi
+          if [ -n "$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl_cancel.feature"
+            CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
           fi
           if [ -n "$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
@@ -583,6 +567,8 @@ jobs:
           fi
           export CUCUMBER_SKIP_FEATURES
           export CUCUMBER_SKIP_REASON_SERVER_CONTROLS
+          export CUCUMBER_SKIP_REASON_SYNCPROV
+          export CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL
           export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
           export CUCUMBER_TIMEOUT_SECONDS=300
           t/ci/run-cucumber-features.sh
@@ -591,6 +577,62 @@ jobs:
             echo '::error::Cucumber suite did not write a result file' >&2
             exit 1
           fi
+
+      - name: Run C SDK SyncRepl notification and cancellation probes
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          SYNCPROBE_RESULT_PATH: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
+        run: |
+          set +e
+          docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
+          set -euxo pipefail
+
+          export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
+          export LD_LIBRARY_PATH=/opt/openldap/lib
+          export OPENLDAP_PREFIX=/opt/openldap
+          export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
+          export SYNCPROBE_LOG_FILE="/results/diagnostics-source-$OPENLDAP_VERSION-$DEBIAN_SUITE/syncrepl-c-sdk-probe.log"
+          export SYNCPROBE_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
+
+          test -s /tmp/net-ldapapi-slapd.pid
+          kill -0 "$(cat /tmp/net-ldapapi-slapd.pid)"
+          bash t/ci/run-syncrepl-c-sdk-probe.sh
+          cat "$SYNCPROBE_RESULTS_FILE"
+          tail -n 120 "$SYNCPROBE_LOG_FILE"
+          notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
+          cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
+          test "$notification_status" = PASS
+          test "$cancel_status" = PASS || test "$cancel_status" = SKIP
+          EOF
+          probe_status=$?
+          set -e
+          if [ ! -s "$SYNCPROBE_RESULT_PATH" ]; then
+            echo '::error::C SDK probe did not write a result' >&2
+            mkdir -p "$(dirname "$SYNCPROBE_RESULT_PATH")"
+            printf '%s\t%s\t%s\t%s\n' \
+              notification FAIL infrastructure \
+              'the direct C SDK probe did not write a result' \
+              > "$SYNCPROBE_RESULT_PATH"
+            printf '%s\t%s\t%s\t%s\n' \
+              cancel FAIL infrastructure \
+              'the direct C SDK probe did not write a result' \
+              >> "$SYNCPROBE_RESULT_PATH"
+          fi
+          test "$probe_status" -eq 0
+          notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULT_PATH")"
+          cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULT_PATH")"
+          test "$notification_status" = PASS
+          test "$cancel_status" = PASS || test "$cancel_status" = SKIP
+
+      - name: Upload direct C SDK SyncRepl probe results
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
+          path: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
+          if-no-files-found: ignore
 
       - name: Collect Debian diagnostics and stop LDAP test server
         if: ${{ always() }}
@@ -695,7 +737,7 @@ jobs:
   cucumber_freebsd:
     name: OpenLDAP ${{ matrix.openldap.version }} (source on FreeBSD ${{ matrix.freebsd.release }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       max-parallel: 6
@@ -713,6 +755,7 @@ jobs:
       OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
       OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
       OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
+      OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON: ${{ matrix.openldap.syncrepl_cancel_skip_reason }}
       BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
       BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
       OPENLDAP_PREFIX: /tmp/net-ldapapi-openldap-${{ matrix.openldap.version }}
@@ -742,6 +785,7 @@ jobs:
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
             LDAPAPI_CI_DEBUG
             OPENLDAP_SERVER_CONTROLS_SKIP_REASON
+            OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON
           prepare: |
             pkg install -y \
               bash \
@@ -1041,6 +1085,7 @@ jobs:
           fi
 
           /usr/sbin/daemon \
+            -f \
             -p "$state_dir/slapd.pid" \
             -o /tmp/net-ldapapi-slapd.log \
             "$OPENLDAP_PREFIX/libexec/slapd" \
@@ -1068,52 +1113,6 @@ jobs:
           test -s "$state_dir/slapd.pid"
           kill -0 "$(cat "$state_dir/slapd.pid")"
 
-      - name: Run C SDK SyncRepl Probe
-        continue-on-error: true
-        shell: freebsd {0}
-        run: |
-          set -eu
-
-          perl_prefix=/tmp/net-ldapapi-perl5
-          work_dir=/tmp/net-ldapapi-work
-          results_dir="$GITHUB_WORKSPACE/.ci-results"
-          diagnostics_dir="$GITHUB_WORKSPACE/.ci-diagnostics/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION"
-          state_dir="/tmp/net-ldapapi-ci-state-$OPENLDAP_VERSION"
-          export PATH="$perl_prefix/bin:$OPENLDAP_PREFIX/bin:$OPENLDAP_PREFIX/sbin:/usr/local/bin:$PATH"
-          export PERL5LIB="$perl_prefix/lib/perl5"
-          export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
-          cd "$work_dir"
-
-          test -s "$state_dir/slapd.pid"
-          kill -0 "$(cat "$state_dir/slapd.pid")"
-          export SYNCPROBE_RESULTS_FILE="$results_dir/syncrepl-c-sdk-probe-freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
-          export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
-          export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
-          set +e
-          bash t/ci/run-syncrepl-c-sdk-probe.sh
-          probe_status=$?
-          set -e
-          if [ ! -s "$SYNCPROBE_RESULTS_FILE" ]; then
-            echo '::error::C SDK probe did not write a result' >&2
-            printf '%s\t%s\t%s\n' \
-              FAIL infrastructure \
-              'the C SDK probe did not write a result' \
-              > "$SYNCPROBE_RESULTS_FILE"
-          fi
-          cat "$SYNCPROBE_RESULTS_FILE" || true
-          tail -n 120 "$SYNCPROBE_LOG_FILE" || true
-          test "$probe_status" -eq 0
-          test "$(cut -f1 "$SYNCPROBE_RESULTS_FILE")" = PASS
-
-      - name: Upload FreeBSD direct C SDK SyncRepl probe result
-        if: ${{ always() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
-          path: .ci-results/syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
-          if-no-files-found: ignore
-
       - name: Run full Cucumber suite in FreeBSD
         timeout-minutes: 15
         shell: freebsd {0}
@@ -1137,8 +1136,16 @@ jobs:
           kill -0 "$(cat "$state_dir/slapd.pid")"
           CUCUMBER_SKIP_FEATURES=''
           CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
+          CUCUMBER_SKIP_REASON_SYNCPROV=''
+          CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL=''
           if [ "$OPENLDAP_SYNCPROV" != true ]; then
-            CUCUMBER_SKIP_FEATURES='syncrepl.feature'
+            CUCUMBER_SKIP_FEATURES='syncrepl.feature syncrepl_cancel.feature'
+            CUCUMBER_SKIP_REASON_SYNCPROV='OpenLDAP source predates the syncprov overlay'
+            CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$CUCUMBER_SKIP_REASON_SYNCPROV"
+          fi
+          if [ -n "$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl_cancel.feature"
+            CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
           fi
           if [ -n "$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
@@ -1149,6 +1156,8 @@ jobs:
           fi
           export CUCUMBER_SKIP_FEATURES
           export CUCUMBER_SKIP_REASON_SERVER_CONTROLS
+          export CUCUMBER_SKIP_REASON_SYNCPROV
+          export CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL
           export CUCUMBER_RESULTS_FILE="$result_file"
           export CUCUMBER_TIMEOUT_SECONDS=300
           export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
@@ -1162,6 +1171,61 @@ jobs:
             suite_status=1
           fi
           printf '%s\n' "$suite_status" > "$status_file"
+
+      - name: Run C SDK SyncRepl notification and cancellation probes
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: freebsd {0}
+        run: |
+          set -eu
+
+          perl_prefix=/tmp/net-ldapapi-perl5
+          work_dir=/tmp/net-ldapapi-work
+          results_dir="$GITHUB_WORKSPACE/.ci-results"
+          diagnostics_dir="$GITHUB_WORKSPACE/.ci-diagnostics/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION"
+          state_dir="/tmp/net-ldapapi-ci-state-$OPENLDAP_VERSION"
+          export PATH="$perl_prefix/bin:$OPENLDAP_PREFIX/bin:$OPENLDAP_PREFIX/sbin:/usr/local/bin:$PATH"
+          export PERL5LIB="$perl_prefix/lib/perl5"
+          export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
+          cd "$work_dir"
+
+          test -s "$state_dir/slapd.pid"
+          kill -0 "$(cat "$state_dir/slapd.pid")"
+          export SYNCPROBE_RESULTS_FILE="$results_dir/syncrepl-c-sdk-probe-freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
+          export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
+          export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
+          export SYNCPROBE_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
+          set +e
+          bash t/ci/run-syncrepl-c-sdk-probe.sh
+          probe_status=$?
+          set -e
+          if [ ! -s "$SYNCPROBE_RESULTS_FILE" ]; then
+            echo '::error::C SDK probe did not write a result' >&2
+            printf '%s\t%s\t%s\t%s\n' \
+              notification FAIL infrastructure \
+              'the direct C SDK probe did not write a result' \
+              > "$SYNCPROBE_RESULTS_FILE"
+            printf '%s\t%s\t%s\t%s\n' \
+              cancel FAIL infrastructure \
+              'the direct C SDK probe did not write a result' \
+              >> "$SYNCPROBE_RESULTS_FILE"
+          fi
+          cat "$SYNCPROBE_RESULTS_FILE" || true
+          tail -n 120 "$SYNCPROBE_LOG_FILE" || true
+          test "$probe_status" -eq 0
+          notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
+          cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
+          test "$notification_status" = PASS
+          test "$cancel_status" = PASS || test "$cancel_status" = SKIP
+
+      - name: Upload FreeBSD direct C SDK SyncRepl probe results
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
+          path: .ci-results/syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
+          if-no-files-found: ignore
 
       - name: Collect FreeBSD diagnostics and stop LDAP test server
         if: ${{ always() }}
@@ -1326,19 +1390,26 @@ jobs:
                 if (!file.endsWith('.tsv')) {
                   continue;
                 }
-                const [resultLine] = fs.readFileSync(
+                const probeResults = fs.readFileSync(
                   `syncrepl-c-sdk-probe-results/${file}`,
                   'utf8',
-                ).trim().split('\n').filter(Boolean);
-                if (!resultLine) {
+                ).trim().split('\n').filter(Boolean).map((line) => {
+                  const fields = line.split('\t');
+                  if (fields.length >= 4) {
+                    const [mode, status, stage, detail] = fields;
+                    return { mode, status, stage, detail };
+                  }
+                  const [status, stage, detail] = fields;
+                  return { mode: 'all', status, stage, detail };
+                });
+                if (!probeResults.length) {
                   continue;
                 }
-                const [status, stage, detail] = resultLine.split('\t');
                 syncreplProbeResultsByLane.set(
                   file
                     .replace(/^syncrepl-c-sdk-probe-/, '')
                     .replace(/\.tsv$/, ''),
-                  { status, stage, detail },
+                  probeResults,
                 );
               }
             }
@@ -1496,23 +1567,26 @@ jobs:
               );
               const syncreplProbeCell = (version, platform) => {
                 const item = probeResultByLane.get(`${version}:${platform}`);
-                if (!item || !item.probe) {
+                if (!item || !item.probe || !item.probe.length) {
                   return 'NOT REPORTED';
                 }
-                if (item.probe.status === 'PASS') {
-                  return 'PASS';
-                }
-                return [
-                  item.probe.status || 'FAILURE',
-                  item.probe.stage,
-                  item.probe.detail,
-                ].filter(Boolean).join(' - ');
+                return item.probe.map((probe) => {
+                  if (probe.status === 'PASS') {
+                    return `${probe.mode}: PASS`;
+                  }
+                  return [
+                    probe.mode,
+                    probe.status || 'FAILURE',
+                    probe.stage,
+                    probe.detail,
+                  ].filter(Boolean).join(' - ');
+                }).join('<br>');
               };
               lines.push(
                 '',
-                '## Direct OpenLDAP C SDK SyncRepl probe',
+                '## Direct OpenLDAP C SDK SyncRepl probes',
                 '',
-                'This probe runs in every historical source-build cell and uses the same bind, persistent Sync Request, mutations, polling, and Cancel sequence as `syncrepl.feature`, without the Perl/XS layer.',
+                'These probes independently cover post-subscription notification and persistent-search cancellation using the OpenLDAP C SDK, without the Perl/XS layer. A compatibility SKIP records a known server defect without hiding notification coverage.',
                 '',
                 `| OpenLDAP | ${platforms.join(' | ')} |`,
                 `|---|${platforms.map(() => '---').join('|')}|`,

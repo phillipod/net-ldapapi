@@ -1,12 +1,12 @@
-Feature: Receiving post-subscription changes with syncrepl
+Feature: Cancelling a persistent syncrepl search
  As a OpenLDAP directory consumer
- I want to ensure that I can be notified of changes to entries within the directory
- In order to act quickly on changes
+ I want to ensure that I can cancel a persistent syncrepl search
+ In order to release listener resources cleanly
 
  Background:
    Given a usable Net::LDAPapi class
 
- Scenario: Can receive post-subscription changes within the directory
+ Scenario: Can cancel a persistent syncrepl search
    Given a Net::LDAPapi object that has been connected to the LDAP server
    When I've bound with default authentication to the directory
    And a test container has been created
@@ -18,3 +18,5 @@ Feature: Receiving post-subscription changes with syncrepl
    And the new container result is LDAP_SUCCESS
    And the delete entry result is LDAP_SUCCESS
    And the changes were successfully notified
+   And the persistent syncrepl search was successfully cancelled
+   And the test container has been deleted

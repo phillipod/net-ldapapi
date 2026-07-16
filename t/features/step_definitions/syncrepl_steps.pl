@@ -84,8 +84,11 @@ Then qr/the changes were successfully notified/i, sub {
       }
     }
   }
-  
+
   ok($seen_expected, 'Have we seen a notification for an expected DN?');
+};
+
+Then qr/the persistent syncrepl search was successfully cancelled/i, sub {
 
   my %args;
   

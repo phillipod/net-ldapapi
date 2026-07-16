@@ -1,10 +1,11 @@
 /*
- * Exercise the same SyncRepl sequence as t/features/syncrepl.feature using
+ * Exercise the notification and cancellation sequences from
+ * t/features/syncrepl.feature and t/features/syncrepl_cancel.feature using
  * the OpenLDAP C client SDK directly.  In particular, keep the listener
  * asynchronous and issue the mutations immediately after ldap_search_ext().
  *
  * Usage:
- *   syncrepl-c-sdk-probe LDAP_URI BIND_DN PASSWORD BASE_DN [TIMEOUT_SECONDS]
+ *   syncrepl-c-sdk-probe LDAP_URI BIND_DN PASSWORD BASE_DN [TIMEOUT_SECONDS] [notification|cancel]
  */
 
 #include <ldap.h>
@@ -68,7 +69,7 @@ add_person(LDAP *ld, const char *dn, const char *cn)
 		"top", "person", "organizationalPerson", "inetOrgPerson", NULL
 	};
 	char *cn_values[] = { (char *)cn, NULL };
-	char *sn_values[] = { "C SDK SyncRepl Probe", NULL };
+	char *sn_values[] = { "C SDK SyncRepl Notification Probe", NULL };
 	char *given_name_values[] = { "C SDK", NULL };
 	LDAPMod object_class_mod;
 	LDAPMod cn_mod;
@@ -288,6 +289,7 @@ main(int argc, char **argv)
 	const char *password;
 	const char *base_dn;
 	int timeout_seconds = 30;
+	int cancel_sync_search = 0;
 	LDAP *ld = NULL;
 	int protocol_version = LDAP_VERSION3;
 	struct berval credential;
@@ -307,9 +309,9 @@ main(int argc, char **argv)
 	int probe_status = EXIT_FAILURE;
 	int rc;
 
-	if (argc < 5 || argc > 6) {
+	if (argc < 5 || argc > 7) {
 		fprintf(stderr,
-			"Usage: %s LDAP_URI BIND_DN PASSWORD BASE_DN [TIMEOUT_SECONDS]\n",
+			"Usage: %s LDAP_URI BIND_DN PASSWORD BASE_DN [TIMEOUT_SECONDS] [notification|cancel]\n",
 			argv[0]);
 		return EXIT_FAILURE;
 	}
@@ -318,9 +320,19 @@ main(int argc, char **argv)
 	bind_dn = argv[2];
 	password = argv[3];
 	base_dn = argv[4];
-	if (argc == 6 && parse_timeout(argv[5], &timeout_seconds) != 0) {
+	if (argc >= 6 && parse_timeout(argv[5], &timeout_seconds) != 0) {
 		fprintf(stderr, "C-SYNCPROBE invalid timeout: %s\n", argv[5]);
 		return EXIT_FAILURE;
+	}
+	if (argc == 7) {
+		if (strcmp(argv[6], "notification") == 0) {
+			cancel_sync_search = 0;
+		} else if (strcmp(argv[6], "cancel") == 0) {
+			cancel_sync_search = 1;
+		} else {
+			fprintf(stderr, "C-SYNCPROBE invalid mode: %s\n", argv[6]);
+			return EXIT_FAILURE;
+		}
 	}
 
 	if (snprintf(container_name, sizeof(container_name),
@@ -429,17 +441,25 @@ cleanup:
 		ber_free(sync_ber, 1);
 	}
 
-	if (ld != NULL && search_message_id >= 0) {
-		/* Keep an operation failure attributed to its original SDK call. */
-		if (probe_status == EXIT_SUCCESS) {
+	if (ld != NULL && search_message_id >= 0 && probe_status == EXIT_SUCCESS) {
+		if (cancel_sync_search) {
 			report_stage("ldap_cancel_s");
-		}
-		rc = ldap_cancel_s(ld, search_message_id, NULL, NULL);
-		if (rc != LDAP_SUCCESS) {
-			report_ldap_error("ldap_cancel_s", rc);
-			probe_status = EXIT_FAILURE;
+			rc = ldap_cancel_s(ld, search_message_id, NULL, NULL);
+			if (rc != LDAP_SUCCESS) {
+				report_ldap_error("ldap_cancel_s", rc);
+				probe_status = EXIT_FAILURE;
+			} else {
+				fprintf(stderr, "C-SYNCPROBE cancelled Sync search\n");
+			}
 		} else {
-			fprintf(stderr, "C-SYNCPROBE cancelled Sync search\n");
+			report_stage("ldap_abandon_ext");
+			rc = ldap_abandon_ext(ld, search_message_id, NULL, NULL);
+			if (rc != LDAP_SUCCESS) {
+				report_ldap_error("ldap_abandon_ext", rc);
+				probe_status = EXIT_FAILURE;
+			} else {
+				fprintf(stderr, "C-SYNCPROBE abandoned Sync search\n");
+			}
 		}
 	}
 

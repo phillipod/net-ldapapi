@@ -44,10 +44,15 @@ locate_failed_step() {
 }
 
 find t/features -type f -name '*.feature' \
-  ! -name 'syncrepl.feature' | sort \
+  ! -name 'syncrepl.feature' \
+  ! -name 'syncrepl_cancel.feature' | sort \
   > /tmp/net-ldapapi-features.txt
 if [ -f t/features/syncrepl.feature ]; then
   printf '%s\n' t/features/syncrepl.feature \
+    >> /tmp/net-ldapapi-features.txt
+fi
+if [ -f t/features/syncrepl_cancel.feature ]; then
+  printf '%s\n' t/features/syncrepl_cancel.feature \
     >> /tmp/net-ldapapi-features.txt
 fi
 
@@ -60,7 +65,10 @@ while IFS= read -r feature_file; do
         skip_reason="${CUCUMBER_SKIP_REASON_SERVER_CONTROLS:-OpenLDAP source predates the sssvlv overlay}"
         ;;
       syncrepl.feature)
-        skip_reason='OpenLDAP source predates the syncprov overlay'
+        skip_reason="${CUCUMBER_SKIP_REASON_SYNCPROV:-OpenLDAP source predates the syncprov overlay}"
+        ;;
+      syncrepl_cancel.feature)
+        skip_reason="${CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL:-OpenLDAP source predates the syncprov overlay}"
         ;;
       *)
         skip_reason='Feature is not supported by this compatibility lane'
