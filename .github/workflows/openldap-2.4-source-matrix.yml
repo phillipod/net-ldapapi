@@ -301,7 +301,11 @@ jobs:
           result_dir="$RUNNER_TEMP/cucumber-results"
           result_file="source-$OPENLDAP_VERSION-$DEBIAN_SUITE.tsv"
           syncrepl_probe_result_file="syncrepl-c-sdk-probe-source-$OPENLDAP_VERSION-$DEBIAN_SUITE.tsv"
+          setup_ready_file="ldap-environment-source-$OPENLDAP_VERSION-$DEBIAN_SUITE.ready"
           mkdir -p "$result_dir"
+          rm -f "$result_dir/$result_file" \
+            "$result_dir/$syncrepl_probe_result_file" \
+            "$result_dir/$setup_ready_file"
           docker rm -f "$DEBIAN_TEST_CONTAINER" >/dev/null 2>&1 || true
           docker run --detach --name "$DEBIAN_TEST_CONTAINER" \
             --volume "$PWD:/src:ro" \
@@ -317,9 +321,10 @@ jobs:
             --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
             --env SYNCPROBE_RESULT_FILE="$syncrepl_probe_result_file" \
             --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
+            --env LDAPAPI_SETUP_READY_FILE="$setup_ready_file" \
             "$IMAGE" \
             tail -f /dev/null
-          docker exec --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
+          docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
           set -euxo pipefail
 
           export DEBIAN_FRONTEND=noninteractive
@@ -501,12 +506,20 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
           kill -0 "$(cat /tmp/net-ldapapi-slapd.pid)"
+          printf '%s\n' ready > "/results/$LDAPAPI_SETUP_READY_FILE"
           EOF
+          if [ ! -s "$result_dir/$setup_ready_file" ]; then
+            echo '::error::LDAP test environment did not report readiness' >&2
+            exit 1
+          fi
 
       - name: Run C SDK SyncRepl Probe
         continue-on-error: true
+        env:
+          SYNCPROBE_RESULT_PATH: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
         run: |
-          docker exec --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
+          set +e
+          docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
           set -euxo pipefail
 
           export PATH="/opt/openldap/bin:/opt/openldap/sbin:$PATH"
@@ -522,6 +535,18 @@ jobs:
           tail -n 120 "$SYNCPROBE_LOG_FILE"
           test "$(cut -f1 "$SYNCPROBE_RESULTS_FILE")" = PASS
           EOF
+          probe_status=$?
+          set -e
+          if [ ! -s "$SYNCPROBE_RESULT_PATH" ]; then
+            echo '::error::C SDK probe did not write a result' >&2
+            mkdir -p "$(dirname "$SYNCPROBE_RESULT_PATH")"
+            printf '%s\t%s\t%s\n' \
+              FAIL infrastructure \
+              'the C SDK probe did not write a result' \
+              > "$SYNCPROBE_RESULT_PATH"
+          fi
+          test "$probe_status" -eq 0
+          test "$(cut -f1 "$SYNCPROBE_RESULT_PATH")" = PASS
 
       - name: Upload direct C SDK SyncRepl probe result
         if: ${{ always() }}
@@ -534,8 +559,10 @@ jobs:
 
       - name: Run full Cucumber suite
         timeout-minutes: 15
+        env:
+          CUCUMBER_RESULT_PATH: ${{ runner.temp }}/cucumber-results/source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
         run: |
-          docker exec --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
+          docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
           set -euxo pipefail
 
           export HOME=/tmp/net-ldapapi-home
@@ -560,13 +587,17 @@ jobs:
           export CUCUMBER_TIMEOUT_SECONDS=300
           t/ci/run-cucumber-features.sh
           EOF
+          if [ ! -s "$CUCUMBER_RESULT_PATH" ]; then
+            echo '::error::Cucumber suite did not write a result file' >&2
+            exit 1
+          fi
 
       - name: Collect Debian diagnostics and stop LDAP test server
         if: ${{ always() }}
         run: |
           set +e
           if docker container inspect "$DEBIAN_TEST_CONTAINER" >/dev/null 2>&1; then
-            docker exec --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
+            docker exec --interactive --workdir /work "$DEBIAN_TEST_CONTAINER" bash -s <<'EOF'
           set +e
 
           export HOME=/tmp/net-ldapapi-home
@@ -1058,9 +1089,20 @@ jobs:
           export SYNCPROBE_RESULTS_FILE="$results_dir/syncrepl-c-sdk-probe-freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
           export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
           export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
+          set +e
           bash t/ci/run-syncrepl-c-sdk-probe.sh
-          cat "$SYNCPROBE_RESULTS_FILE"
-          tail -n 120 "$SYNCPROBE_LOG_FILE"
+          probe_status=$?
+          set -e
+          if [ ! -s "$SYNCPROBE_RESULTS_FILE" ]; then
+            echo '::error::C SDK probe did not write a result' >&2
+            printf '%s\t%s\t%s\n' \
+              FAIL infrastructure \
+              'the C SDK probe did not write a result' \
+              > "$SYNCPROBE_RESULTS_FILE"
+          fi
+          cat "$SYNCPROBE_RESULTS_FILE" || true
+          tail -n 120 "$SYNCPROBE_LOG_FILE" || true
+          test "$probe_status" -eq 0
           test "$(cut -f1 "$SYNCPROBE_RESULTS_FILE")" = PASS
 
       - name: Upload FreeBSD direct C SDK SyncRepl probe result
@@ -1115,6 +1157,10 @@ jobs:
           t/ci/run-cucumber-features.sh
           suite_status=$?
           set -e
+          if [ ! -s "$result_file" ]; then
+            echo '::error::Cucumber suite did not write a result file' >&2
+            suite_status=1
+          fi
           printf '%s\n' "$suite_status" > "$status_file"
 
       - name: Collect FreeBSD diagnostics and stop LDAP test server
