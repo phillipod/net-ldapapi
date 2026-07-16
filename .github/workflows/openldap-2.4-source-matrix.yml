@@ -752,6 +752,11 @@ jobs:
           $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
           1;
           PERL
+          peercred_identity="$(perl -e 'print "gidNumber=$<+uidNumber=" . (split(/ /, "$("))[0] . ",cn=peercred,cn=external,cn=auth"')"
+          sasl_realm="$(hostname -s)"
+          printf '%s\n' net-ldapapi-ci \
+            | saslpasswd2 -c -p -u "$sasl_realm" "$peercred_identity"
+          sasldblistusers2 | grep -F "$peercred_identity@$sasl_realm"
 
           slapd_conf=/tmp/net-ldapapi-slapd.conf
           cp t/ldap/slapd.conf "$slapd_conf"
