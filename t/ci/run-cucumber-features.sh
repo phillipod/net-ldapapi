@@ -57,7 +57,7 @@ while IFS= read -r feature_file; do
   if [[ "$skip_features" == *" $feature_name "* ]]; then
     case "$feature_name" in
       server_controls.feature)
-        skip_reason='OpenLDAP source predates the sssvlv overlay'
+        skip_reason="${CUCUMBER_SKIP_REASON_SERVER_CONTROLS:-OpenLDAP source predates the sssvlv overlay}"
         ;;
       syncrepl.feature)
         skip_reason='OpenLDAP source predates the syncprov overlay'

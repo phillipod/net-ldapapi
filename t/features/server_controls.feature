@@ -1,4 +1,8 @@
 Feature: Using server controls to control results
+# Compatibility note: historical source-build CI skips this feature for
+# OpenLDAP 2.4.22 because its slapo-sssvlv VLV response encodes
+# virtualListViewResult as INTEGER rather than ENUMERATED (ITS#6685; fixed in
+# OpenLDAP 2.4.24).
  As a directory consumer
  I want to ensure that I can use server controls when querying the directory
  In order to be able to utilise the extended features of my directory

@@ -44,6 +44,10 @@ t/features/extended_operations.feature
 t/features/bind.feature
 t/features/delete.feature
 t/01-bdd-cucumber.t
+t/ci/locate-cucumber-failure.pl
+t/ci/run-cucumber-features.sh
+t/ci/run-syncrepl-c-sdk-probe.sh
+t/ci/syncrepl-c-sdk-probe.c
 t/ldap/bootstrap.ldif
 t/ldap/README.md
 t/ldap/slapd.conf

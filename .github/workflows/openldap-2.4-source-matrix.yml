@@ -15,6 +15,9 @@ permissions:
 
 env:
   LDAPAPI_CI_DEBUG: ${{ inputs.ldapapi_ci_debug }}
+  # These versions bracket the cross-platform SyncRepl failures without
+  # multiplying the already-large historical source-build matrix.
+  SYNCPROBE_OPENLDAP_VERSIONS: '2.4.6 2.4.31 2.4.32 2.4.40 2.4.42'
 
 jobs:
   cucumber:
@@ -64,7 +67,12 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            # Its sssvlv overlay encodes virtualListViewResult as INTEGER,
+            # rather than ENUMERATED (ITS#6685, fixed in 2.4.24).
             sssvlv: true
+            server_controls_skip_reason: >-
+              OpenLDAP 2.4.22 encodes the VLV result as INTEGER rather than
+              ENUMERATED (ITS#6685; fixed in 2.4.24)
           - version: 2.4.29
             sha256: 44e95acab6c94b53723a451bd272c10f4f596f42bf26593ab84bb399d053c1e1
             backend: mdb
@@ -288,10 +296,12 @@ jobs:
           OPENLDAP_BACKEND: ${{ matrix.openldap.backend }}
           OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
           OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
+          OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
           OPENLDAP_CACHE_DIR: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
         run: |
           result_dir="$RUNNER_TEMP/cucumber-results"
           result_file="source-$OPENLDAP_VERSION-$DEBIAN_SUITE.tsv"
+          syncrepl_probe_result_file="syncrepl-c-sdk-probe-source-$OPENLDAP_VERSION-$DEBIAN_SUITE.tsv"
           mkdir -p "$result_dir"
           docker run --rm --interactive \
             --volume "$PWD:/src:ro" \
@@ -303,7 +313,10 @@ jobs:
             --env OPENLDAP_BACKEND="$OPENLDAP_BACKEND" \
             --env OPENLDAP_SYNCPROV="$OPENLDAP_SYNCPROV" \
             --env OPENLDAP_SSSVLV="$OPENLDAP_SSSVLV" \
+            --env OPENLDAP_SERVER_CONTROLS_SKIP_REASON="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" \
             --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
+            --env SYNCPROBE_OPENLDAP_VERSIONS="$SYNCPROBE_OPENLDAP_VERSIONS" \
+            --env SYNCPROBE_RESULT_FILE="$syncrepl_probe_result_file" \
             --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
             "$IMAGE" \
             bash -s <<'EOF'
@@ -559,14 +572,31 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
+          case " $SYNCPROBE_OPENLDAP_VERSIONS " in
+            *" $OPENLDAP_VERSION "*)
+              export OPENLDAP_PREFIX=/opt/openldap
+              export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
+              export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
+              bash t/ci/run-syncrepl-c-sdk-probe.sh
+              cat "$SYNCPROBE_RESULTS_FILE"
+              tail -n 120 "$SYNCPROBE_LOG_FILE"
+              ;;
+          esac
+
           CUCUMBER_SKIP_FEATURES=''
+          CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
           if [ "$OPENLDAP_SYNCPROV" != true ]; then
             CUCUMBER_SKIP_FEATURES='syncrepl.feature'
           fi
-          if [ "$OPENLDAP_SSSVLV" != true ]; then
+          if [ -n "$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
+            CUCUMBER_SKIP_REASON_SERVER_CONTROLS="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON"
+          elif [ "$OPENLDAP_SSSVLV" != true ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
+            CUCUMBER_SKIP_REASON_SERVER_CONTROLS='OpenLDAP source predates the sssvlv overlay'
           fi
           export CUCUMBER_SKIP_FEATURES
+          export CUCUMBER_SKIP_REASON_SERVER_CONTROLS
           export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
           t/ci/run-cucumber-features.sh
           EOF
@@ -577,6 +607,14 @@ jobs:
         with:
           name: cucumber-results-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
           path: ${{ runner.temp }}/cucumber-results/source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
+          if-no-files-found: ignore
+
+      - name: Upload direct C SDK SyncRepl probe result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
+          path: ${{ runner.temp }}/cucumber-results/syncrepl-c-sdk-probe-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
           if-no-files-found: ignore
 
       - name: Upload Debian diagnostics
@@ -607,6 +645,7 @@ jobs:
       OPENLDAP_BACKEND: ${{ matrix.openldap.backend }}
       OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
       OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
+      OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
       BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
       BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
       OPENLDAP_PREFIX: /tmp/net-ldapapi-openldap-${{ matrix.openldap.version }}
@@ -634,7 +673,8 @@ jobs:
             OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
             OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
-            LDAPAPI_CI_DEBUG
+            LDAPAPI_CI_DEBUG SYNCPROBE_OPENLDAP_VERSIONS
+            OPENLDAP_SERVER_CONTROLS_SKIP_REASON
           prepare: |
             pkg install -y \
               bash \
@@ -862,6 +902,7 @@ jobs:
 
           results_dir="$GITHUB_WORKSPACE/.ci-results"
           result_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
+          syncrepl_probe_result_file="$results_dir/syncrepl-c-sdk-probe-freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
           status_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.status"
           diagnostics_dir="$GITHUB_WORKSPACE/.ci-diagnostics/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION"
           rm -rf "$diagnostics_dir"
@@ -1023,14 +1064,31 @@ jobs:
           cat /tmp/net-ldapapi-smoke.out
           test -s /tmp/net-ldapapi-smoke.out
 
+          case " $SYNCPROBE_OPENLDAP_VERSIONS " in
+            *" $OPENLDAP_VERSION "*)
+              export SYNCPROBE_RESULTS_FILE="$syncrepl_probe_result_file"
+              export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
+              export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
+              bash t/ci/run-syncrepl-c-sdk-probe.sh
+              cat "$SYNCPROBE_RESULTS_FILE"
+              tail -n 120 "$SYNCPROBE_LOG_FILE"
+              ;;
+          esac
+
           CUCUMBER_SKIP_FEATURES=''
+          CUCUMBER_SKIP_REASON_SERVER_CONTROLS=''
           if [ "$OPENLDAP_SYNCPROV" != true ]; then
             CUCUMBER_SKIP_FEATURES='syncrepl.feature'
           fi
-          if [ "$OPENLDAP_SSSVLV" != true ]; then
+          if [ -n "$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
+            CUCUMBER_SKIP_REASON_SERVER_CONTROLS="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON"
+          elif [ "$OPENLDAP_SSSVLV" != true ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
+            CUCUMBER_SKIP_REASON_SERVER_CONTROLS='OpenLDAP source predates the sssvlv overlay'
           fi
           export CUCUMBER_SKIP_FEATURES
+          export CUCUMBER_SKIP_REASON_SERVER_CONTROLS
           export CUCUMBER_RESULTS_FILE="$result_file"
           export CUCUMBER_TIMEOUT_SECONDS=300
           export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
@@ -1047,6 +1105,14 @@ jobs:
         with:
           name: cucumber-results-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
           path: .ci-results/freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
+          if-no-files-found: ignore
+
+      - name: Upload FreeBSD direct C SDK SyncRepl probe result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
+          path: .ci-results/syncrepl-c-sdk-probe-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
           if-no-files-found: ignore
 
       - name: Upload FreeBSD diagnostics
@@ -1083,6 +1149,14 @@ jobs:
           path: cucumber-results
           merge-multiple: true
 
+      - name: Download direct C SDK SyncRepl probe results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: syncrepl-c-sdk-probe-*
+          path: syncrepl-c-sdk-probe-results
+          merge-multiple: true
+
       - name: Publish pass/fail matrix
         id: matrix-summary
         uses: actions/github-script@v7
@@ -1090,6 +1164,7 @@ jobs:
           script: |
             const fs = require('fs');
             const cucumberResultsByLane = new Map();
+            const syncreplProbeResultsByLane = new Map();
             if (fs.existsSync('cucumber-results')) {
               for (const file of fs.readdirSync('cucumber-results')) {
                 if (!file.endsWith('.tsv')) {
@@ -1108,6 +1183,32 @@ jobs:
                 );
               }
             }
+            if (fs.existsSync('syncrepl-c-sdk-probe-results')) {
+              for (const file of fs.readdirSync('syncrepl-c-sdk-probe-results')) {
+                if (!file.endsWith('.tsv')) {
+                  continue;
+                }
+                const [resultLine] = fs.readFileSync(
+                  `syncrepl-c-sdk-probe-results/${file}`,
+                  'utf8',
+                ).trim().split('\n').filter(Boolean);
+                if (!resultLine) {
+                  continue;
+                }
+                const [status, stage, detail] = resultLine.split('\t');
+                syncreplProbeResultsByLane.set(
+                  file
+                    .replace(/^syncrepl-c-sdk-probe-/, '')
+                    .replace(/\.tsv$/, ''),
+                  { status, stage, detail },
+                );
+              }
+            }
+            const syncreplProbeVersions = new Set(
+              (process.env.SYNCPROBE_OPENLDAP_VERSIONS || '')
+                .split(/\s+/)
+                .filter(Boolean),
+            );
             const jobs = await github.paginate(
               github.rest.actions.listJobsForWorkflowRun,
               {
@@ -1152,7 +1253,10 @@ jobs:
               );
               const skippedFeatures = cucumberResults.filter(
                 (item) => item.status === 'SKIP',
-              ).map((item) => item.feature);
+              ).map((item) => ({
+                feature: item.feature,
+                detail: item.detail,
+              }));
               const failedFeature = featureFailures.length
                 ? featureFailures.map((item) => item.feature).join('<br>')
                 : '';
@@ -1181,6 +1285,7 @@ jobs:
                 failedScenarioStep,
                 failureDetail,
                 skippedFeatures,
+                resultKey,
                 url: job.html_url,
               }];
             });
@@ -1207,7 +1312,9 @@ jobs:
               }
               if (item.result === 'PASS') {
                 return item.skippedFeatures.length
-                  ? `PASS (SKIP: ${item.skippedFeatures.join(', ')})`
+                  ? `PASS (SKIP: ${item.skippedFeatures.map((skip) => (
+                    `${skip.feature}: ${skip.detail}`
+                  )).join('<br>')})`
                   : 'PASS';
               }
               return [
@@ -1215,6 +1322,11 @@ jobs:
                 item.failedWorkflowStep,
                 item.failedFeature,
                 item.failedScenarioStep,
+                item.skippedFeatures.length
+                  ? `SKIP: ${item.skippedFeatures.map((skip) => (
+                    `${skip.feature}: ${skip.detail}`
+                  )).join('<br>')}`
+                  : '',
               ].filter(Boolean).join(' - ');
             };
             const escapeCell = (value) => value.replace(/\|/g, '\\|');
@@ -1234,8 +1346,54 @@ jobs:
             ];
             lines.push(
               '',
-              'SKIP marks a feature that the selected OpenLDAP source predates.',
+              'SKIP marks a compatibility-lane exclusion; its stated reason records whether the selected OpenLDAP source lacks an overlay or has a known server defect.',
             );
+
+            const syncreplProbeResults = results
+              .filter((item) => syncreplProbeVersions.has(item.version))
+              .map((item) => ({
+                ...item,
+                probe: syncreplProbeResultsByLane.get(item.resultKey),
+              }));
+            if (syncreplProbeResults.length) {
+              const probeResultByLane = new Map(
+                syncreplProbeResults.map((item) => [
+                  `${item.version}:${item.platform}`,
+                  item,
+                ]),
+              );
+              const syncreplProbeCell = (version, platform) => {
+                const item = probeResultByLane.get(`${version}:${platform}`);
+                if (!item || !item.probe) {
+                  return 'NOT REPORTED';
+                }
+                if (item.probe.status === 'PASS') {
+                  return 'PASS';
+                }
+                return [
+                  item.probe.status || 'FAILURE',
+                  item.probe.stage,
+                  item.probe.detail,
+                ].filter(Boolean).join(' - ');
+              };
+              const probeVersions = [...syncreplProbeVersions].sort((left, right) => (
+                left.localeCompare(right, undefined, { numeric: true })
+              ));
+              lines.push(
+                '',
+                '## Direct OpenLDAP C SDK SyncRepl probe',
+                '',
+                'This selected-version probe uses the same bind, persistent Sync Request, mutations, polling, and Cancel sequence as `syncrepl.feature`, without the Perl/XS layer.',
+                '',
+                `| OpenLDAP | ${platforms.join(' | ')} |`,
+                `|---|${platforms.map(() => '---').join('|')}|`,
+                ...probeVersions.map((version) => (
+                  `| ${version} | ${platforms.map((platform) => (
+                    escapeCell(syncreplProbeCell(version, platform))
+                  )).join(' | ')} |`
+                )),
+              );
+            }
 
             const failures = results.filter((item) => item.result !== 'PASS');
             if (failures.length) {
@@ -1243,8 +1401,8 @@ jobs:
                 '',
                 '## Failed lanes',
                 '',
-                '| OpenLDAP | Platform | Result | Failed workflow step | Failed feature | Failed scenario step | Detail | Job |',
-                '|---|---|---|---|---|---|---|---|',
+                '| OpenLDAP | Platform | Result | Failed workflow step | Failed feature | Failed scenario step | Skipped feature(s) | Detail | Job |',
+                '|---|---|---|---|---|---|---|---|---|',
                 ...failures
                   .sort((left, right) => (
                     left.version.localeCompare(
@@ -1260,6 +1418,9 @@ jobs:
                     escapeCell(item.failedWorkflowStep || '-'),
                     escapeCell(item.failedFeature || '-'),
                     escapeCell(item.failedScenarioStep || 'Not reported'),
+                    escapeCell(item.skippedFeatures.map((skip) => (
+                      `${skip.feature}: ${skip.detail}`
+                    )).join('<br>') || '-'),
                     escapeCell(item.failureDetail || '-'),
                     `[logs](${item.url}) |`,
                   ].join(' | ')),
