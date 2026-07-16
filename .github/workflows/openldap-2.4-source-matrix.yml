@@ -10,7 +10,6 @@ permissions:
 jobs:
   cucumber:
     name: OpenLDAP ${{ matrix.openldap.version }} (source on Debian ${{ matrix.debian.name }})
-    if: ${{ vars.ENABLE_HISTORICAL_DEBIAN_SOURCE_MATRIX == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
