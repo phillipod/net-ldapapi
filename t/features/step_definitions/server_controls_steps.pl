@@ -104,11 +104,12 @@ Then qr/the server side sort control was successfully used/i, sub {
     }
   }
   
-  isnt($berval, undef, "Was a berval returned?");
-  
-  my $result = $sss_response->decode($berval) || ok(0, $sss_response->error);
+  return if !isnt($berval, undef, "Was a berval returned?");
 
-  is(ldap_err2string($result->{'sortResult'}), ldap_err2string(LDAP_SUCCESS), "Does server side sort result code match?");        
+  my $result = $sss_response->decode($berval);
+  return if !ok(defined $result, $sss_response->error || 'Could not decode server side sort response');
+
+  is(ldap_err2string($result->{'sortResult'}), ldap_err2string(LDAP_SUCCESS), "Does server side sort result code match?");
 };
 
 Then qr/the virtual list view control was successfully used/i, sub {
@@ -125,11 +126,12 @@ Then qr/the virtual list view control was successfully used/i, sub {
     }
   }
   
-  isnt($berval, undef, "Was a berval returned?");
-  
-  my $result = $vlv_response->decode($berval) || ok(0, $vlv_response->error);
+  return if !isnt($berval, undef, "Was a berval returned?");
 
-  is(ldap_err2string($result->{'virtualListViewResult'}), ldap_err2string(LDAP_SUCCESS), "Does virtual list view result code match?");        
+  my $result = $vlv_response->decode($berval);
+  return if !ok(defined $result, $vlv_response->error || 'Could not decode virtual list view response');
+
+  is(ldap_err2string($result->{'virtualListViewResult'}), ldap_err2string(LDAP_SUCCESS), "Does virtual list view result code match?");
 };
 
 

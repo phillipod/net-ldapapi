@@ -82,8 +82,11 @@ our %TestConfig = (
   },
   'syncrepl' => {
     'enabled' => 1,
-    'cookie_dir' => '/tmp/'  
+    'cookie_dir' => '/tmp/',
+    'notification_timeout' => 30,
+    'poll_alarm_timeout' => 10,
   },
+  'async_result_timeout' => 30,
   'server_controls' => {
     'sss' => [
       {
