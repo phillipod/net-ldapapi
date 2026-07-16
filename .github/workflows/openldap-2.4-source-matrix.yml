@@ -10,6 +10,7 @@ permissions:
 jobs:
   cucumber:
     name: OpenLDAP ${{ matrix.openldap.version }} (source on Debian ${{ matrix.debian.name }})
+    if: ${{ vars.ENABLE_HISTORICAL_DEBIAN_SOURCE_MATRIX == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -468,15 +469,20 @@ jobs:
           if-no-files-found: ignore
 
   cucumber_freebsd:
-    name: OpenLDAP ${{ matrix.openldap.version }} (source on FreeBSD 15.1)
+    name: OpenLDAP ${{ matrix.openldap.version }} (source on FreeBSD ${{ matrix.freebsd.release }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 6
       matrix:
+        freebsd:
+          - release: '12.4'
+            name: FreeBSD 12.4
         openldap: *openldap_versions
     env:
+      FREEBSD_RELEASE: ${{ matrix.freebsd.release }}
+      FREEBSD_NAME: ${{ matrix.freebsd.name }}
       OPENLDAP_VERSION: ${{ matrix.openldap.version }}
       OPENLDAP_SHA256: ${{ matrix.openldap.sha256 }}
       OPENLDAP_BACKEND: ${{ matrix.openldap.backend }}
@@ -485,7 +491,7 @@ jobs:
       BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
       BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
       OPENLDAP_PREFIX: /tmp/net-ldapapi-openldap-${{ matrix.openldap.version }}
-      OPENLDAP_CACHE_ARCHIVE: ${{ github.workspace }}/.cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
+      OPENLDAP_CACHE_ARCHIVE: ${{ github.workspace }}/.cache/openldap/freebsd-${{ matrix.freebsd.release }}/${{ matrix.openldap.version }}.tar.gz
 
     steps:
       - name: Check out source
@@ -495,16 +501,17 @@ jobs:
         id: restore-openldap-freebsd
         uses: actions/cache/restore@v4
         with:
-          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
-          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v4
+          path: .cache/openldap/freebsd-${{ matrix.freebsd.release }}/${{ matrix.openldap.version }}.tar.gz
+          key: openldap-source-FreeBSD-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v4
 
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
         with:
-          release: '15.1'
+          release: ${{ matrix.freebsd.release }}
           usesh: true
           sync: nfs
           envs: >-
+            FREEBSD_RELEASE FREEBSD_NAME
             OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
             OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
@@ -645,7 +652,7 @@ jobs:
         if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
+          path: .cache/openldap/freebsd-${{ matrix.freebsd.release }}/${{ matrix.openldap.version }}.tar.gz
           key: ${{ steps.restore-openldap-freebsd.outputs.cache-primary-key }}
 
       - name: Install Cucumber 0.34 and build Net::LDAPapi in FreeBSD
@@ -726,8 +733,8 @@ jobs:
           cd "$work_dir"
 
           results_dir="$GITHUB_WORKSPACE/.ci-results"
-          result_file="$results_dir/freebsd-$OPENLDAP_VERSION.tsv"
-          status_file="$results_dir/freebsd-$OPENLDAP_VERSION.status"
+          result_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
+          status_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.status"
           mkdir -p "$results_dir" "$HOME"
           rm -f "$result_file" "$status_file"
 
@@ -820,14 +827,14 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cucumber-results-freebsd-${{ matrix.openldap.version }}
-          path: .ci-results/freebsd-${{ matrix.openldap.version }}.tsv
+          name: cucumber-results-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
+          path: .ci-results/freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
           if-no-files-found: ignore
 
       - name: Enforce FreeBSD Cucumber result
         if: ${{ always() }}
         run: |
-          status_file=".ci-results/freebsd-${{ matrix.openldap.version }}.status"
+          status_file=".ci-results/freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.status"
           if [ ! -s "$status_file" ]; then
             echo 'FreeBSD test run did not record a Cucumber status' >&2
             exit 1
@@ -886,21 +893,24 @@ jobs:
             );
 
             const results = jobs.flatMap((job) => {
+              if (job.conclusion === 'skipped') {
+                return [];
+              }
               const debianMatch = job.name.match(
                 /^OpenLDAP ([0-9.]+) \(source on Debian (Wheezy|Jessie)\)$/,
               );
               const freebsdMatch = job.name.match(
-                /^OpenLDAP ([0-9.]+) \(source on FreeBSD 15\.1\)$/,
+                /^OpenLDAP ([0-9.]+) \(source on FreeBSD ([0-9.]+)\)$/,
               );
               if (!debianMatch && !freebsdMatch) {
                 return [];
               }
 
               const version = debianMatch ? debianMatch[1] : freebsdMatch[1];
-              const platform = debianMatch ? debianMatch[2] : 'FreeBSD 15.1';
+              const platform = debianMatch ? debianMatch[2] : `FreeBSD ${freebsdMatch[2]}`;
               const resultKey = debianMatch
                 ? `source-${version}-${platform.toLowerCase()}`
-                : `freebsd-${version}`;
+                : `freebsd-${freebsdMatch[2]}-${version}`;
 
               const failedStep = (job.steps || []).find(
                 (step) => !['success', 'skipped'].includes(step.conclusion),
@@ -958,6 +968,12 @@ jobs:
             const resultByLane = new Map(
               results.map((item) => [`${item.version}:${item.platform}`, item]),
             );
+            const platforms = [...new Set(results.map((item) => item.platform))]
+              .sort((left, right) => left.localeCompare(
+                right,
+                undefined,
+                { numeric: true },
+              ));
             const matrixCell = (version, platform) => {
               const item = resultByLane.get(`${version}:${platform}`);
               if (!item) {
@@ -982,10 +998,12 @@ jobs:
               '',
               `Run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              '| OpenLDAP | Debian Wheezy | Debian Jessie | FreeBSD 15.1 |',
-              '|---|---|---|---|',
+              `| OpenLDAP | ${platforms.join(' | ')} |`,
+              `|---|${platforms.map(() => '---').join('|')}|`,
               ...versions.map((version) => (
-                `| ${version} | ${escapeCell(matrixCell(version, 'Wheezy'))} | ${escapeCell(matrixCell(version, 'Jessie'))} | ${escapeCell(matrixCell(version, 'FreeBSD 15.1'))} |`
+                `| ${version} | ${platforms.map((platform) => (
+                  escapeCell(matrixCell(version, platform))
+                )).join(' | ')} |`
               )),
             ];
             lines.push(
