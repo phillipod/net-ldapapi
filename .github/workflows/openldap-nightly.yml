@@ -209,7 +209,12 @@ jobs:
           PERL
 
           cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
+          schema_dir=/opt/openldap/etc/openldap/schema
+          test -r "$schema_dir/core.schema"
+          test -r "$schema_dir/cosine.schema"
+          test -r "$schema_dir/inetorgperson.schema"
           sed -i \
+            -e "s#/etc/ldap/schema/#$schema_dir/#g" \
             -e '/^modulepath[[:space:]]/d' \
             -e '/^moduleload[[:space:]]/d' \
             /tmp/net-ldapapi-slapd.conf

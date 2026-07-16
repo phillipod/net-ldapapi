@@ -43,7 +43,7 @@ use warnings;
 my ($feature_file, $log_file) = @ARGV;
 open my $log, '<', $log_file or die "Cannot read $log_file: $!";
 my $failed_step_index;
-my $last_step_index = 0;
+my $last_step_index;
 while (my $line = <$log>) {
   $line =~ s/\e\[[0-9;]*[[:alpha:]]//g;
   if ($line =~ /^\s*(ok|not[ ]ok)\s+(\d+)\s+-\s+
@@ -88,9 +88,12 @@ for my $scenario (@scenarios) {
   } (@background, @{$scenario->{steps}});
 }
 
-my $location = defined $failed_step_index
-  ? $execution[$failed_step_index - 1]
-  : $execution[$last_step_index];
+my $location;
+if (defined $failed_step_index) {
+  $location = $execution[$failed_step_index - 1];
+} elsif (defined $last_step_index) {
+  $location = $execution[$last_step_index];
+}
 if ($location) {
   print "$location->{scenario}\t$location->{step}\n";
 }
