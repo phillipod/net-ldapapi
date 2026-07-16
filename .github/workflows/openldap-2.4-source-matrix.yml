@@ -392,7 +392,17 @@ jobs:
           1;
           PERL
 
+          needs_legacy_sasl_auxprop=false
+          case "$OPENLDAP_VERSION" in
+            2.3.43|2.4.6|2.4.7|2.4.8|2.4.9|2.4.10|2.4.11|2.4.12|2.4.13|2.4.14|2.4.15)
+              needs_legacy_sasl_auxprop=true
+              ;;
+          esac
+
           cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
+          if [ "$needs_legacy_sasl_auxprop" = true ]; then
+            printf '%s\n' 'sasl-auxprops slapd' >> /tmp/net-ldapapi-slapd.conf
+          fi
           schema_dir=/opt/openldap/etc/openldap/schema
           test -r "$schema_dir/core.schema"
           test -r "$schema_dir/cosine.schema"
@@ -752,14 +762,25 @@ jobs:
           $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
           1;
           PERL
-          peercred_identity="$(perl -e 'print "gidNumber=$<+uidNumber=" . (split(/ /, "$("))[0] . ",cn=peercred,cn=external,cn=auth"')"
-          sasl_realm="$(hostname -s)"
-          printf '%s\n' net-ldapapi-ci \
-            | saslpasswd2 -c -p -u "$sasl_realm" "$peercred_identity"
-          sasldblistusers2 | grep -F "$peercred_identity@$sasl_realm"
+          needs_legacy_sasl_auxprop=false
+          case "$OPENLDAP_VERSION" in
+            2.3.43|2.4.6|2.4.7|2.4.8|2.4.9|2.4.10|2.4.11|2.4.12|2.4.13|2.4.14|2.4.15)
+              needs_legacy_sasl_auxprop=true
+              ;;
+          esac
+          if [ "$needs_legacy_sasl_auxprop" = true ]; then
+            peercred_identity="$(perl -e 'print "gidNumber=$<+uidNumber=" . (split(/ /, "$("))[0] . ",cn=peercred,cn=external,cn=auth"')"
+            sasl_realm="$(hostname -s)"
+            printf '%s\n' net-ldapapi-ci \
+              | saslpasswd2 -c -p -u "$sasl_realm" "$peercred_identity"
+            sasldblistusers2 | grep -F "$peercred_identity@$sasl_realm"
+          fi
 
           slapd_conf=/tmp/net-ldapapi-slapd.conf
           cp t/ldap/slapd.conf "$slapd_conf"
+          if [ "$needs_legacy_sasl_auxprop" = true ]; then
+            printf '%s\n' 'sasl-auxprops slapd' >> "$slapd_conf"
+          fi
           schema_dir="$OPENLDAP_PREFIX/etc/openldap/schema"
           test -r "$schema_dir/core.schema"
           test -r "$schema_dir/cosine.schema"
