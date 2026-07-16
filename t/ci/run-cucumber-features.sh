@@ -6,8 +6,12 @@ set -uo pipefail
 results_file="${CUCUMBER_RESULTS_FILE:?CUCUMBER_RESULTS_FILE must name a writable result file}"
 timeout_seconds="${CUCUMBER_TIMEOUT_SECONDS:-180}"
 skip_features=" ${CUCUMBER_SKIP_FEATURES:-} "
+log_dir="${CUCUMBER_LOG_DIR:-}"
 
 mkdir -p "$(dirname "$results_file")"
+if [ -n "$log_dir" ]; then
+  mkdir -p "$log_dir"
+fi
 : > "$results_file"
 
 record_result() {
@@ -73,6 +77,9 @@ while IFS= read -r feature_file; do
     prove -blv t/01-bdd-cucumber.t :: "$feature_file" 2>&1 \
     | tee "$log_file"
   feature_status="${PIPESTATUS[0]}"
+  if [ -n "$log_dir" ]; then
+    cp "$log_file" "$log_dir/$feature_name.log" 2>/dev/null || true
+  fi
 
   if [ "$feature_status" -eq 0 ]; then
     record_result PASS "$feature_name" '' '' ''

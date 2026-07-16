@@ -2,10 +2,19 @@ name: OpenLDAP historical source compatibility
 
 on:
   workflow_dispatch:
+    inputs:
+      ldapapi_ci_debug:
+        description: Capture verbose slapd and system diagnostics
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   actions: read
   contents: read
+
+env:
+  LDAPAPI_CI_DEBUG: ${{ inputs.ldapapi_ci_debug }}
 
 jobs:
   cucumber:
@@ -294,6 +303,7 @@ jobs:
             --env OPENLDAP_BACKEND="$OPENLDAP_BACKEND" \
             --env OPENLDAP_SYNCPROV="$OPENLDAP_SYNCPROV" \
             --env OPENLDAP_SSSVLV="$OPENLDAP_SSSVLV" \
+            --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
             --env CUCUMBER_RESULTS_FILE="/results/$result_file" \
             "$IMAGE" \
             bash -s <<'EOF'
@@ -301,6 +311,82 @@ jobs:
 
           export DEBIAN_FRONTEND=noninteractive
           export HOME=/tmp/net-ldapapi-home
+          ulimit -c unlimited || true
+
+          diagnostics_dir="/results/diagnostics-source-$OPENLDAP_VERSION-$DEBIAN_SUITE"
+          rm -rf "$diagnostics_dir"
+          mkdir -p "$diagnostics_dir/features" "$diagnostics_dir/cores"
+          slapd_pid=''
+
+          collect_diagnostics() {
+            {
+              date -u
+              uname -a
+              id
+              printf 'LDAPAPI_CI_DEBUG=%s\n' "${LDAPAPI_CI_DEBUG:-true}"
+              ulimit -a
+              if [ -r /proc/sys/kernel/core_pattern ]; then
+                printf 'kernel.core_pattern='
+                cat /proc/sys/kernel/core_pattern
+              fi
+            } > "$diagnostics_dir/environment.txt" 2>&1 || true
+
+            env | sort > "$diagnostics_dir/env.txt" 2>&1 || true
+            dpkg-query -W > "$diagnostics_dir/packages.txt" 2>&1 || true
+            ps auxww > "$diagnostics_dir/processes.txt" 2>&1 || true
+            ldd /work/blib/arch/auto/Net/LDAPapi/LDAPapi.so \
+              > "$diagnostics_dir/LDAPapi.so.ldd.txt" 2>&1 || true
+
+            for file in \
+              /tmp/slapd-version.txt \
+              /tmp/net-ldapapi-slapd.conf \
+              /tmp/net-ldapapi-slapd.log \
+              /tmp/net-ldapapi-slaptest.log \
+              /tmp/net-ldapapi-slapadd.log \
+              /tmp/net-ldapapi-smoke.out \
+              /tmp/net-ldapapi-smoke.err \
+              "$HOME/.net-ldapapi-test-config.conf"; do
+              if [ -e "$file" ]; then
+                cp "$file" "$diagnostics_dir/$(basename "$file")" \
+                  2>/dev/null || true
+              fi
+            done
+
+            find /work /tmp -maxdepth 4 -type f \
+              \( -name core -o -name 'core.*' -o -name '*.core' \) \
+              -exec cp {} "$diagnostics_dir/cores/" \; \
+              >/dev/null 2>&1 || true
+
+            if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+              dmesg > "$diagnostics_dir/dmesg.txt" 2>&1 || true
+              for log in \
+                /var/log/syslog \
+                /var/log/messages \
+                /var/log/kern.log \
+                /var/log/daemon.log; do
+                if [ -r "$log" ]; then
+                  cp "$log" "$diagnostics_dir/$(basename "$log")" \
+                    2>/dev/null || true
+                fi
+              done
+            fi
+          }
+
+          cleanup() {
+            ps auxww > "$diagnostics_dir/processes-before-cleanup.txt" \
+              2>&1 || true
+            if [ -n "${slapd_pid:-}" ]; then
+              kill "$slapd_pid" 2>/dev/null || true
+              wait "$slapd_pid" 2>/dev/null || true
+            fi
+            collect_diagnostics
+            if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+              tail -n 250 /tmp/net-ldapapi-slapd.log || true
+            else
+              cat /tmp/net-ldapapi-slapd.log || true
+            fi
+          }
+          trap cleanup EXIT
 
           cp -a /src/. /work/
           sed -i "s/\$VERSION = '3\.0\.x';/\$VERSION = '3.000999';/" LDAPapi.pm
@@ -433,20 +519,30 @@ jobs:
 
           rm -rf /tmp/net-ldapapi-slapd-data /tmp/net-ldapapi-ldapi
           install -d /tmp/net-ldapapi-slapd-data /run/slapd /var/run/slapd
-          slaptest -f /tmp/net-ldapapi-slapd.conf -u
-          slapadd -f /tmp/net-ldapapi-slapd.conf -l t/ldap/bootstrap.ldif
+          if ! slaptest -f /tmp/net-ldapapi-slapd.conf -u \
+            >/tmp/net-ldapapi-slaptest.log 2>&1; then
+            cat /tmp/net-ldapapi-slaptest.log
+            exit 1
+          fi
+          cat /tmp/net-ldapapi-slaptest.log
+          if ! slapadd -f /tmp/net-ldapapi-slapd.conf \
+            -l t/ldap/bootstrap.ldif \
+            >/tmp/net-ldapapi-slapadd.log 2>&1; then
+            cat /tmp/net-ldapapi-slapadd.log
+            exit 1
+          fi
+          cat /tmp/net-ldapapi-slapadd.log
 
-          "$slapd_command" -f /tmp/net-ldapapi-slapd.conf \
+          slapd_debug_args=''
+          if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+            slapd_debug_args="-d ${SLAPD_DEBUG_LEVEL:-16648}"
+          fi
+
+          "$slapd_command" $slapd_debug_args \
+            -f /tmp/net-ldapapi-slapd.conf \
             -h 'ldap://127.0.0.1:39010/ ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/' \
             > /tmp/net-ldapapi-slapd.log 2>&1 &
           slapd_pid="$!"
-
-          cleanup() {
-            kill "$slapd_pid" 2>/dev/null || true
-            wait "$slapd_pid" 2>/dev/null || true
-            cat /tmp/net-ldapapi-slapd.log || true
-          }
-          trap cleanup EXIT
 
           for _ in $(seq 1 30); do
             if ldapsearch -LLL -x \
@@ -471,6 +567,7 @@ jobs:
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES server_controls.feature"
           fi
           export CUCUMBER_SKIP_FEATURES
+          export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
           t/ci/run-cucumber-features.sh
           EOF
 
@@ -480,6 +577,14 @@ jobs:
         with:
           name: cucumber-results-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
           path: ${{ runner.temp }}/cucumber-results/source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}.tsv
+          if-no-files-found: ignore
+
+      - name: Upload Debian diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
+          path: ${{ runner.temp }}/cucumber-results/diagnostics-source-${{ matrix.openldap.version }}-${{ matrix.debian.suite }}
           if-no-files-found: ignore
 
   cucumber_freebsd:
@@ -529,6 +634,7 @@ jobs:
             OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
             OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
+            LDAPAPI_CI_DEBUG
           prepare: |
             pkg install -y \
               bash \
@@ -744,6 +850,7 @@ jobs:
         shell: freebsd {0}
         run: |
           set -eu
+          ulimit -c unlimited || true
 
           perl_prefix=/tmp/net-ldapapi-perl5
           work_dir=/tmp/net-ldapapi-work
@@ -756,8 +863,77 @@ jobs:
           results_dir="$GITHUB_WORKSPACE/.ci-results"
           result_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
           status_file="$results_dir/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.status"
-          mkdir -p "$results_dir" "$HOME"
+          diagnostics_dir="$GITHUB_WORKSPACE/.ci-diagnostics/freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION"
+          rm -rf "$diagnostics_dir"
+          mkdir -p "$results_dir" "$diagnostics_dir/features" "$diagnostics_dir/cores" "$HOME"
           rm -f "$result_file" "$status_file"
+          slapd_pid=''
+
+          collect_diagnostics() {
+            {
+              date -u
+              uname -a
+              id
+              printf 'LDAPAPI_CI_DEBUG=%s\n' "${LDAPAPI_CI_DEBUG:-true}"
+              ulimit -a
+              sysctl kern.corefile 2>/dev/null || true
+            } > "$diagnostics_dir/environment.txt" 2>&1 || true
+
+            env | sort > "$diagnostics_dir/env.txt" 2>&1 || true
+            pkg info > "$diagnostics_dir/packages.txt" 2>&1 || true
+            ps auxww > "$diagnostics_dir/processes.txt" 2>&1 || true
+            ldd "$work_dir/blib/arch/auto/Net/LDAPapi/LDAPapi.so" \
+              > "$diagnostics_dir/LDAPapi.so.ldd.txt" 2>&1 || true
+
+            for file in \
+              /tmp/slapd-version.txt \
+              /tmp/net-ldapapi-slapd.conf \
+              /tmp/net-ldapapi-slapd.log \
+              /tmp/net-ldapapi-slaptest.log \
+              /tmp/net-ldapapi-slapadd.log \
+              /tmp/net-ldapapi-smoke.out \
+              /tmp/net-ldapapi-smoke.err \
+              "$HOME/.net-ldapapi-test-config.conf"; do
+              if [ -e "$file" ]; then
+                cp "$file" "$diagnostics_dir/$(basename "$file")" \
+                  2>/dev/null || true
+              fi
+            done
+
+            find "$work_dir" /tmp -maxdepth 4 -type f \
+              \( -name core -o -name 'core.*' -o -name '*.core' \) \
+              -exec cp {} "$diagnostics_dir/cores/" \; \
+              >/dev/null 2>&1 || true
+
+            if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+              dmesg > "$diagnostics_dir/dmesg.txt" 2>&1 || true
+              for log in \
+                /var/log/messages \
+                /var/log/debug.log \
+                /var/log/all.log; do
+                if [ -r "$log" ]; then
+                  cp "$log" "$diagnostics_dir/$(basename "$log")" \
+                    2>/dev/null || true
+                fi
+              done
+            fi
+          }
+
+          cleanup() {
+            ps auxww > "$diagnostics_dir/processes-before-cleanup.txt" \
+              2>&1 || true
+            if [ -n "${slapd_pid:-}" ]; then
+              kill "$slapd_pid" 2>/dev/null || true
+              wait "$slapd_pid" 2>/dev/null || true
+            fi
+            collect_diagnostics
+            if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+              tail -n 250 /tmp/net-ldapapi-slapd.log || true
+            else
+              cat /tmp/net-ldapapi-slapd.log || true
+            fi
+          }
+          trap cleanup EXIT
 
           cat > "$HOME/.net-ldapapi-test-config.conf" <<'PERL'
           $RunDeveloperTests = 1;
@@ -803,23 +979,31 @@ jobs:
 
           rm -rf /tmp/net-ldapapi-slapd-data /tmp/net-ldapapi-ldapi
           mkdir -p /tmp/net-ldapapi-slapd-data
-          "$OPENLDAP_PREFIX/sbin/slaptest" -f "$slapd_conf" -u
-          "$OPENLDAP_PREFIX/sbin/slapadd" \
+          if ! "$OPENLDAP_PREFIX/sbin/slaptest" -f "$slapd_conf" -u \
+            >/tmp/net-ldapapi-slaptest.log 2>&1; then
+            cat /tmp/net-ldapapi-slaptest.log
+            exit 1
+          fi
+          cat /tmp/net-ldapapi-slaptest.log
+          if ! "$OPENLDAP_PREFIX/sbin/slapadd" \
             -f "$slapd_conf" \
-            -l t/ldap/bootstrap.ldif
+            -l t/ldap/bootstrap.ldif \
+            >/tmp/net-ldapapi-slapadd.log 2>&1; then
+            cat /tmp/net-ldapapi-slapadd.log
+            exit 1
+          fi
+          cat /tmp/net-ldapapi-slapadd.log
 
-          "$OPENLDAP_PREFIX/libexec/slapd" \
+          slapd_debug_args=''
+          if [ "${LDAPAPI_CI_DEBUG:-true}" = true ]; then
+            slapd_debug_args="-d ${SLAPD_DEBUG_LEVEL:-16648}"
+          fi
+
+          "$OPENLDAP_PREFIX/libexec/slapd" $slapd_debug_args \
             -f "$slapd_conf" \
             -h 'ldap://127.0.0.1:39010/ ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/' \
             >/tmp/net-ldapapi-slapd.log 2>&1 &
           slapd_pid=$!
-
-          cleanup() {
-            kill "$slapd_pid" 2>/dev/null || true
-            wait "$slapd_pid" 2>/dev/null || true
-            cat /tmp/net-ldapapi-slapd.log || true
-          }
-          trap cleanup EXIT
 
           attempt=0
           while [ "$attempt" -lt 30 ]; do
@@ -849,6 +1033,7 @@ jobs:
           export CUCUMBER_SKIP_FEATURES
           export CUCUMBER_RESULTS_FILE="$result_file"
           export CUCUMBER_TIMEOUT_SECONDS=300
+          export CUCUMBER_LOG_DIR="$diagnostics_dir/features"
 
           set +e
           t/ci/run-cucumber-features.sh
@@ -862,6 +1047,14 @@ jobs:
         with:
           name: cucumber-results-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
           path: .ci-results/freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}.tsv
+          if-no-files-found: ignore
+
+      - name: Upload FreeBSD diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
+          path: .ci-diagnostics/freebsd-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}
           if-no-files-found: ignore
 
       - name: Enforce FreeBSD Cucumber result
