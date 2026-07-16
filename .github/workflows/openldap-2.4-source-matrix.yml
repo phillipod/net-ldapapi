@@ -20,7 +20,7 @@ jobs:
   cucumber:
     name: OpenLDAP ${{ matrix.openldap.version }} (source on Debian ${{ matrix.debian.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
