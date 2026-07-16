@@ -392,19 +392,17 @@ jobs:
           1;
           PERL
 
-          needs_legacy_sasl_auxprop=false
+          skip_legacy_sasl=false
           case "$OPENLDAP_VERSION" in
             2.3.43|2.4.6|2.4.7|2.4.8|2.4.9|2.4.10|2.4.11|2.4.12|2.4.13|2.4.14|2.4.15)
-              needs_legacy_sasl_auxprop=true
+              skip_legacy_sasl=true
               ;;
           esac
-
-          if [ "$needs_legacy_sasl_auxprop" = true ]; then
-            for sasl_conf_dir in /usr/lib/sasl2 /etc/sasl2; do
-              install -d "$sasl_conf_dir"
-              printf '%s\n' 'auxprop_plugin: slapd' \
-                > "$sasl_conf_dir/slapd.conf"
-            done
+          if [ "$skip_legacy_sasl" = true ]; then
+            printf '%s\n' \
+              "\$TestConfig{'ldap'}{'bind_types'}{'sasl'}{'enabled'} = 0;" \
+              '1;' \
+              >> "$HOME/.net-ldapapi-test-config.conf"
           fi
 
           cp t/ldap/slapd.conf /tmp/net-ldapapi-slapd.conf
@@ -767,23 +765,17 @@ jobs:
           $TestConfig{'ldap'}{'server'}{'ldapi'}{'-url'} = 'ldapi://%2Ftmp%2Fnet-ldapapi-ldapi/';
           1;
           PERL
-          needs_legacy_sasl_auxprop=false
+          skip_legacy_sasl=false
           case "$OPENLDAP_VERSION" in
             2.3.43|2.4.6|2.4.7|2.4.8|2.4.9|2.4.10|2.4.11|2.4.12|2.4.13|2.4.14|2.4.15)
-              needs_legacy_sasl_auxprop=true
+              skip_legacy_sasl=true
               ;;
           esac
-          if [ "$needs_legacy_sasl_auxprop" = true ]; then
-            for sasl_conf_dir in /usr/local/lib/sasl2 /usr/local/etc/sasl2; do
-              mkdir -p "$sasl_conf_dir"
-              printf '%s\n' 'auxprop_plugin: slapd' \
-                > "$sasl_conf_dir/slapd.conf"
-            done
-            peercred_identity="$(perl -e 'print "gidNumber=$<+uidNumber=" . (split(/ /, "$("))[0] . ",cn=peercred,cn=external,cn=auth"')"
-            sasl_realm="$(hostname -s)"
-            printf '%s\n' net-ldapapi-ci \
-              | saslpasswd2 -c -p -u "$sasl_realm" "$peercred_identity"
-            sasldblistusers2 | grep -F "$peercred_identity@$sasl_realm"
+          if [ "$skip_legacy_sasl" = true ]; then
+            printf '%s\n' \
+              "\$TestConfig{'ldap'}{'bind_types'}{'sasl'}{'enabled'} = 0;" \
+              '1;' \
+              >> "$HOME/.net-ldapapi-test-config.conf"
           fi
 
           slapd_conf=/tmp/net-ldapapi-slapd.conf
