@@ -717,6 +717,13 @@ jobs:
             -include_path "$OPENLDAP_PREFIX/include" \
             -lib_path "$OPENLDAP_PREFIX/lib" \
             -sasl_include_path /usr/local/include/sasl
+          perl -0pi -e '
+            BEGIN { $sasl = " -L/usr/local/lib -lsasl2" }
+            $found += s/^(EXTRALIBS = .*)$/$1$sasl/m;
+            $found += s/^(LDLOADLIBS = .*)$/$1$sasl/m;
+            END { die "Could not add Cyrus SASL libraries to generated Makefile\n" unless $found == 2 }
+          ' Makefile
+          grep -E '^(EXTRALIBS|LDLOADLIBS) = .* -lsasl2' Makefile
           gmake
 
       - name: Run full Cucumber suite in FreeBSD
