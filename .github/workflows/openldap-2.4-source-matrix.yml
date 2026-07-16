@@ -496,7 +496,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
-          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v3
+          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v4
 
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
@@ -541,6 +541,14 @@ jobs:
           mkdir -p "$OPENLDAP_PREFIX"
           tar -xzf "$OPENLDAP_CACHE_ARCHIVE" -C "$OPENLDAP_PREFIX"
           test -x "$OPENLDAP_PREFIX/libexec/slapd"
+          if ls "$OPENLDAP_PREFIX"/lib/libldap*.so* \
+            "$OPENLDAP_PREFIX"/lib/liblber*.so* >/dev/null 2>&1; then
+            echo 'OpenLDAP shared client libraries are available'
+          else
+            echo 'OpenLDAP shared client libraries are unavailable; using PIC static client archives'
+            test -r "$OPENLDAP_PREFIX/lib/libldap.a"
+            test -r "$OPENLDAP_PREFIX/lib/liblber.a"
+          fi
 
       - name: Build OpenLDAP from source in FreeBSD
         if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
@@ -623,8 +631,14 @@ jobs:
           gmake install
 
           test -x "$OPENLDAP_PREFIX/libexec/slapd"
-          ls "$OPENLDAP_PREFIX"/lib/libldap*.so* \
-            "$OPENLDAP_PREFIX"/lib/liblber*.so*
+          if ls "$OPENLDAP_PREFIX"/lib/libldap*.so* \
+            "$OPENLDAP_PREFIX"/lib/liblber*.so* >/dev/null 2>&1; then
+            echo 'OpenLDAP shared client libraries are available'
+          else
+            echo 'OpenLDAP shared client libraries are unavailable; using PIC static client archives'
+            test -r "$OPENLDAP_PREFIX/lib/libldap.a"
+            test -r "$OPENLDAP_PREFIX/lib/liblber.a"
+          fi
           tar -czf "$OPENLDAP_CACHE_ARCHIVE" -C "$OPENLDAP_PREFIX" .
 
       - name: Save FreeBSD OpenLDAP source build
