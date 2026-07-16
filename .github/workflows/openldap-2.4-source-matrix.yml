@@ -477,8 +477,8 @@ jobs:
       max-parallel: 6
       matrix:
         freebsd:
-          - release: '12.4'
-            name: FreeBSD 12.4
+          - release: '13.2'
+            name: FreeBSD 13.2
         openldap: *openldap_versions
     env:
       FREEBSD_RELEASE: ${{ matrix.freebsd.release }}
