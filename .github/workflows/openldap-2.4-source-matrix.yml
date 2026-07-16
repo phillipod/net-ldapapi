@@ -484,7 +484,8 @@ jobs:
       OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
       BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
       BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
-      OPENLDAP_PREFIX: ${{ github.workspace }}/.cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
+      OPENLDAP_PREFIX: /tmp/net-ldapapi-openldap-${{ matrix.openldap.version }}
+      OPENLDAP_CACHE_ARCHIVE: ${{ github.workspace }}/.cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
 
     steps:
       - name: Check out source
@@ -494,8 +495,8 @@ jobs:
         id: restore-openldap-freebsd
         uses: actions/cache/restore@v4
         with:
-          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
-          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v1
+          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
+          key: openldap-source-FreeBSD-15.1-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v2
 
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
@@ -506,7 +507,7 @@ jobs:
           envs: >-
             OPENLDAP_VERSION OPENLDAP_SHA256 OPENLDAP_BACKEND
             OPENLDAP_SYNCPROV OPENLDAP_SSSVLV BERKELEY_DB_VERSION
-            BERKELEY_DB_SHA256 OPENLDAP_PREFIX
+            BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
           prepare: |
             pkg install -y \
               bash \
@@ -530,6 +531,17 @@ jobs:
               p5-YAML-Syck \
               perl5
 
+      - name: Extract cached OpenLDAP source build in FreeBSD
+        if: steps.restore-openldap-freebsd.outputs.cache-hit == 'true'
+        shell: freebsd {0}
+        run: |
+          set -eu
+
+          rm -rf "$OPENLDAP_PREFIX"
+          mkdir -p "$OPENLDAP_PREFIX"
+          tar -xzf "$OPENLDAP_CACHE_ARCHIVE" -C "$OPENLDAP_PREFIX"
+          test -x "$OPENLDAP_PREFIX/libexec/slapd"
+
       - name: Build OpenLDAP from source in FreeBSD
         if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
         shell: freebsd {0}
@@ -540,6 +552,8 @@ jobs:
           export LD_LIBRARY_PATH="$OPENLDAP_PREFIX/lib:/usr/local/lib"
           rm -rf "$OPENLDAP_PREFIX"
           mkdir -p "$OPENLDAP_PREFIX"
+          mkdir -p "$(dirname "$OPENLDAP_CACHE_ARCHIVE")"
+          rm -f "$OPENLDAP_CACHE_ARCHIVE"
 
           openldap_archive="/tmp/openldap-$OPENLDAP_VERSION.tgz"
           curl --fail --location --silent --show-error \
@@ -608,11 +622,14 @@ jobs:
           gmake -j2
           gmake install
 
+          test -x "$OPENLDAP_PREFIX/libexec/slapd"
+          tar -czf "$OPENLDAP_CACHE_ARCHIVE" -C "$OPENLDAP_PREFIX" .
+
       - name: Save FreeBSD OpenLDAP source build
         if: steps.restore-openldap-freebsd.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}
+          path: .cache/openldap/freebsd-15.1/${{ matrix.openldap.version }}.tar.gz
           key: ${{ steps.restore-openldap-freebsd.outputs.cache-primary-key }}
 
       - name: Install Cucumber 0.34 and build Net::LDAPapi in FreeBSD
