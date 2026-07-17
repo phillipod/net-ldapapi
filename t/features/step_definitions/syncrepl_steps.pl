@@ -11,6 +11,30 @@ our %TestConfig = %main::TestConfig;
 
 use Data::Dumper;
 
+sub _next_changed_entries_with_alarm {
+  my ($object, $message_id) = @_;
+  my $alarm_timeout = $TestConfig{'syncrepl'}{'poll_alarm_timeout'} || 10;
+  my (@entries, $error);
+
+  {
+    local $SIG{'ALRM'} = sub {
+      die "Timed out while polling the syncrepl result after ${alarm_timeout} seconds\n";
+    };
+
+    alarm($alarm_timeout);
+    my $ok = eval {
+      @entries = $object->next_changed_entries($message_id, 0, 1);
+      1;
+    };
+    $error = $@;
+    alarm(0);
+
+    die $error if !$ok;
+  }
+
+  return @entries;
+}
+
 When qr/I've started listening for changes within the directory/i, sub {
  
   S->{'listen changes_result'} = 'skipped';
@@ -24,13 +48,15 @@ When qr/I've started listening for changes within the directory/i, sub {
   $args{'-scope'} = LDAP_SCOPE_SUBTREE;
   $args{'-filter'} = '(objectClass=*)';
   $args{'-cookie'} = $TestConfig{'syncrepl'}{'cookie_dir'} . "syncrepl.$$.cookie";
-  
-#  open(COOKIE, ">" . $args{'-cookie'});
-#  close(COOKIE);
-    
+
+  open(my $cookie, '>', $args{'-cookie'})
+    or die "Cannot initialise syncrepl cookie '$args{'-cookie'}': $!";
+  close($cookie)
+    or die "Cannot close syncrepl cookie '$args{'-cookie'}': $!";
+
   S->{'listen changes_result'} = S->{'object'}->$func(%args);
-  S->{'object'}->next_changed_entries(S->{'listen changes_result'}, 0, 1);
-      
+  isnt(S->{'listen changes_result'}, undef, 'Was the syncrepl search started?');
+
 };
 
 Then qr/the changes were successfully notified/i, sub {
@@ -40,12 +66,13 @@ Then qr/the changes were successfully notified/i, sub {
   my $seen_expected = 0;
 
   my $timeout_start = time();
-  my $timeout_length = 5;
-  
+  my $timeout_length = $TestConfig{'syncrepl'}{'notification_timeout'} || 30;
+
   while(!$seen_expected) {
     if ((time() - $timeout_start) > $timeout_length) { last; }
-    
-    while(my @entries = S->{'object'}->next_changed_entries(S->{'listen changes_result'}, 0, 1)) {
+
+    while(my @entries = _next_changed_entries_with_alarm(
+      S->{'object'}, S->{'listen changes_result'})) {
       foreach my $entry (@entries) {
                     
         my $entry_dn = S->{'object'}->get_dn($entry->{'entry'});
@@ -57,8 +84,11 @@ Then qr/the changes were successfully notified/i, sub {
       }
     }
   }
-  
+
   ok($seen_expected, 'Have we seen a notification for an expected DN?');
+};
+
+Then qr/the persistent syncrepl search was successfully cancelled/i, sub {
 
   my %args;
   
@@ -76,6 +106,7 @@ ASN
   my $cancel_status = S->{'object'}->extended_operation_s(%args);
   is(ldap_err2string($cancel_status), ldap_err2string(LDAP_SUCCESS), 'Was cancelling the sync successful?');
   S->{'object'}->{'entry'} = 0;
+  unlink($TestConfig{'syncrepl'}{'cookie_dir'} . "syncrepl.$$.cookie");
 };
 
 1;

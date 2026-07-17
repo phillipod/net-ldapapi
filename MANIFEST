@@ -37,6 +37,7 @@ t/features/step_definitions/compare_steps.pl
 t/features/compare.feature
 t/features/modify.feature
 t/features/syncrepl.feature
+t/features/syncrepl_cancel.feature
 t/features/rename.feature
 t/features/add.feature
 t/features/server_controls.feature

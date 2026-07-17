@@ -29,7 +29,9 @@ Feature: Executing extended operations against the directory
  Scenario: Can asynchronously match identities retrieved with native whoami and using extended operations with anonymous authentication
    Given a Net::LDAPapi object that has been connected to the LDAP server
    When I've asynchronously bound with anonymous authentication to the directory
-   And I've asynchronously queried the directory for my identity
+   Then after waiting for all results, the bind result message type is LDAP_RES_BIND
+   And the bind result is LDAP_SUCCESS
+   When I've asynchronously queried the directory for my identity
    And I've asynchronously issued a whoami extended operation to the directory
    Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
    And the identity result is LDAP_SUCCESS
@@ -41,7 +43,9 @@ Feature: Executing extended operations against the directory
  Scenario: Can asynchronously match identities retrieved with native whoami and using extended operations with simple authentication
    Given a Net::LDAPapi object that has been connected to the LDAP server
    When I've asynchronously bound with simple authentication to the directory
-   And I've asynchronously queried the directory for my identity
+   Then after waiting for all results, the bind result message type is LDAP_RES_BIND
+   And the bind result is LDAP_SUCCESS
+   When I've asynchronously queried the directory for my identity
    And I've asynchronously issued a whoami extended operation to the directory
    Then after waiting for all results, the identity result message type is LDAP_RES_EXTENDED
    And the identity result is LDAP_SUCCESS
