@@ -37,6 +37,7 @@ jobs:
             backend: bdb
             berkeley_db: 4.5.20.NC
             berkeley_db_sha256: 81a0ccdcce1e4a8138656190b3dd9ee76b9f922c15500c271283055838dbd497
+            freebsd_cache_revision: v5
             syncprov: true
             # ITS#7928's syncprov cancellation fix was released in 2.4.40.
             syncrepl_cancel_skip_reason: &syncrepl_cancel_its7928 >-
@@ -49,6 +50,10 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            # ITS#5972's syncprov newCookie fix was released in 2.4.16.
+            syncrepl_skip_reason: &syncrepl_its5972 >-
+              OpenLDAP source predates the ITS#5972 syncprov newCookie fix
+              (released in 2.4.16)
             syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.8
@@ -57,6 +62,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_skip_reason: *syncrepl_its5972
             syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.15
@@ -65,6 +71,7 @@ jobs:
             berkeley_db: 4.6.21.NC
             berkeley_db_sha256: 22726bcf2ee193a1687ef8a93f8da307d893bb90de0a9def63589d2b35288986
             syncprov: true
+            syncrepl_skip_reason: *syncrepl_its5972
             syncrepl_cancel_skip_reason: *syncrepl_cancel_its7928
             sssvlv: false
           - version: 2.4.22
@@ -314,6 +321,7 @@ jobs:
           OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
           OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
           OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
+          OPENLDAP_SYNCPROV_SKIP_REASON: ${{ matrix.openldap.syncrepl_skip_reason }}
           OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON: ${{ matrix.openldap.syncrepl_cancel_skip_reason }}
           OPENLDAP_CACHE_DIR: .cache/openldap/${{ matrix.debian.suite }}/${{ matrix.openldap.version }}
         run: |
@@ -337,6 +345,7 @@ jobs:
             --env OPENLDAP_SYNCPROV="$OPENLDAP_SYNCPROV" \
             --env OPENLDAP_SSSVLV="$OPENLDAP_SSSVLV" \
             --env OPENLDAP_SERVER_CONTROLS_SKIP_REASON="$OPENLDAP_SERVER_CONTROLS_SKIP_REASON" \
+            --env OPENLDAP_SYNCPROV_SKIP_REASON="$OPENLDAP_SYNCPROV_SKIP_REASON" \
             --env OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" \
             --env LDAPAPI_CI_DEBUG="$LDAPAPI_CI_DEBUG" \
             --env SYNCPROBE_RESULT_FILE="$syncrepl_probe_result_file" \
@@ -553,6 +562,9 @@ jobs:
             CUCUMBER_SKIP_FEATURES='syncrepl.feature syncrepl_cancel.feature'
             CUCUMBER_SKIP_REASON_SYNCPROV='OpenLDAP source predates the syncprov overlay'
             CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$CUCUMBER_SKIP_REASON_SYNCPROV"
+          elif [ -n "$OPENLDAP_SYNCPROV_SKIP_REASON" ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl.feature"
+            CUCUMBER_SKIP_REASON_SYNCPROV="$OPENLDAP_SYNCPROV_SKIP_REASON"
           fi
           if [ -n "$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl_cancel.feature"
@@ -593,6 +605,7 @@ jobs:
           export OPENLDAP_PREFIX=/opt/openldap
           export SYNCPROBE_RESULTS_FILE="/results/$SYNCPROBE_RESULT_FILE"
           export SYNCPROBE_LOG_FILE="/results/diagnostics-source-$OPENLDAP_VERSION-$DEBIAN_SUITE/syncrepl-c-sdk-probe.log"
+          export SYNCPROBE_NOTIFICATION_SKIP_REASON="$OPENLDAP_SYNCPROV_SKIP_REASON"
           export SYNCPROBE_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
 
           test -s /tmp/net-ldapapi-slapd.pid
@@ -602,7 +615,7 @@ jobs:
           tail -n 120 "$SYNCPROBE_LOG_FILE"
           notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
           cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
-          test "$notification_status" = PASS
+          test "$notification_status" = PASS || test "$notification_status" = SKIP
           test "$cancel_status" = PASS || test "$cancel_status" = SKIP
           EOF
           probe_status=$?
@@ -622,7 +635,7 @@ jobs:
           test "$probe_status" -eq 0
           notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULT_PATH")"
           cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULT_PATH")"
-          test "$notification_status" = PASS
+          test "$notification_status" = PASS || test "$notification_status" = SKIP
           test "$cancel_status" = PASS || test "$cancel_status" = SKIP
 
       - name: Upload direct C SDK SyncRepl probe results
@@ -755,6 +768,7 @@ jobs:
       OPENLDAP_SYNCPROV: ${{ matrix.openldap.syncprov }}
       OPENLDAP_SSSVLV: ${{ matrix.openldap.sssvlv }}
       OPENLDAP_SERVER_CONTROLS_SKIP_REASON: ${{ matrix.openldap.server_controls_skip_reason }}
+      OPENLDAP_SYNCPROV_SKIP_REASON: ${{ matrix.openldap.syncrepl_skip_reason }}
       OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON: ${{ matrix.openldap.syncrepl_cancel_skip_reason }}
       BERKELEY_DB_VERSION: ${{ matrix.openldap.berkeley_db }}
       BERKELEY_DB_SHA256: ${{ matrix.openldap.berkeley_db_sha256 }}
@@ -770,7 +784,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .cache/openldap/freebsd-${{ matrix.freebsd.release }}/${{ matrix.openldap.version }}.tar.gz
-          key: openldap-source-FreeBSD-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-v4
+          key: openldap-source-FreeBSD-${{ matrix.freebsd.release }}-${{ matrix.openldap.version }}-${{ matrix.openldap.sha256 }}-${{ matrix.openldap.backend }}-${{ matrix.openldap.berkeley_db || 'none' }}-${{ matrix.openldap.freebsd_cache_revision || 'v4' }}
 
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
@@ -785,6 +799,7 @@ jobs:
             BERKELEY_DB_SHA256 OPENLDAP_PREFIX OPENLDAP_CACHE_ARCHIVE
             LDAPAPI_CI_DEBUG
             OPENLDAP_SERVER_CONTROLS_SKIP_REASON
+            OPENLDAP_SYNCPROV_SKIP_REASON
             OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON
           prepare: |
             pkg install -y \
@@ -860,11 +875,15 @@ jobs:
               --strip-components=1 \
               -C /tmp/net-ldapapi-berkeley-db
             cd /tmp/net-ldapapi-berkeley-db/build_unix
+            set -- \
+              "--prefix=$OPENLDAP_PREFIX" \
+              --disable-shared \
+              --disable-cxx
+            if [ "$BERKELEY_DB_VERSION" = '4.5.20.NC' ]; then
+              set -- "$@" --with-mutex=x86_64/gcc-assembly
+            fi
             CFLAGS='-O2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types' \
-              ../dist/configure \
-                --prefix="$OPENLDAP_PREFIX" \
-                --disable-shared \
-                --disable-cxx
+              ../dist/configure "$@"
             gmake -j2
             gmake install
           fi
@@ -1142,6 +1161,9 @@ jobs:
             CUCUMBER_SKIP_FEATURES='syncrepl.feature syncrepl_cancel.feature'
             CUCUMBER_SKIP_REASON_SYNCPROV='OpenLDAP source predates the syncprov overlay'
             CUCUMBER_SKIP_REASON_SYNCPROV_CANCEL="$CUCUMBER_SKIP_REASON_SYNCPROV"
+          elif [ -n "$OPENLDAP_SYNCPROV_SKIP_REASON" ]; then
+            CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl.feature"
+            CUCUMBER_SKIP_REASON_SYNCPROV="$OPENLDAP_SYNCPROV_SKIP_REASON"
           fi
           if [ -n "$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON" ]; then
             CUCUMBER_SKIP_FEATURES="$CUCUMBER_SKIP_FEATURES syncrepl_cancel.feature"
@@ -1194,6 +1216,7 @@ jobs:
           export SYNCPROBE_RESULTS_FILE="$results_dir/syncrepl-c-sdk-probe-freebsd-$FREEBSD_RELEASE-$OPENLDAP_VERSION.tsv"
           export SYNCPROBE_LOG_FILE="$diagnostics_dir/syncrepl-c-sdk-probe.log"
           export SYNCPROBE_SASL_LIB_DIR=/usr/local/lib
+          export SYNCPROBE_NOTIFICATION_SKIP_REASON="$OPENLDAP_SYNCPROV_SKIP_REASON"
           export SYNCPROBE_CANCEL_SKIP_REASON="$OPENLDAP_SYNCPROV_CANCEL_SKIP_REASON"
           set +e
           bash t/ci/run-syncrepl-c-sdk-probe.sh
@@ -1215,7 +1238,7 @@ jobs:
           test "$probe_status" -eq 0
           notification_status="$(awk -F '\t' '$1 == "notification" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
           cancel_status="$(awk -F '\t' '$1 == "cancel" { print $2; exit }' "$SYNCPROBE_RESULTS_FILE")"
-          test "$notification_status" = PASS
+          test "$notification_status" = PASS || test "$notification_status" = SKIP
           test "$cancel_status" = PASS || test "$cancel_status" = SKIP
 
       - name: Upload FreeBSD direct C SDK SyncRepl probe results

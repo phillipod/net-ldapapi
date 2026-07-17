@@ -18,6 +18,7 @@ wall_timeout_seconds="${SYNCPROBE_WALL_TIMEOUT_SECONDS:-90}"
 compiler="${CC:-cc}"
 probe_binary="${SYNCPROBE_BINARY:-$(dirname "$log_file")/syncrepl-c-sdk-probe}"
 cancel_skip_reason="${SYNCPROBE_CANCEL_SKIP_REASON:-}"
+notification_skip_reason="${SYNCPROBE_NOTIFICATION_SKIP_REASON:-}"
 read -r -a probe_modes <<< "${SYNCPROBE_MODES:-notification cancel}"
 
 mkdir -p "$(dirname "$results_file")" "$(dirname "$log_file")"
@@ -46,6 +47,13 @@ compile_args=(
   "-L${openldap_prefix}/lib"
   "-Wl,-rpath,${openldap_prefix}/lib"
 )
+link_libraries=(-lldap -llber)
+case "$(uname -s)" in
+  Linux)
+    link_libraries+=(-lresolv)
+    ;;
+esac
+link_libraries+=(-lsasl2)
 if [ -n "${SYNCPROBE_SASL_LIB_DIR:-}" ]; then
   compile_args+=("-L${SYNCPROBE_SASL_LIB_DIR}")
 fi
@@ -55,13 +63,13 @@ fi
   printf 'C-SYNCPROBE OpenLDAP prefix: %s\n' "$openldap_prefix"
   printf 'C-SYNCPROBE command:'
   printf ' %q' "$compiler" "${compile_args[@]}" \
-    -o "$probe_binary" t/ci/syncrepl-c-sdk-probe.c -lldap -llber -lresolv -lsasl2
+    -o "$probe_binary" t/ci/syncrepl-c-sdk-probe.c "${link_libraries[@]}"
   printf '\n'
 } >> "$log_file"
 
 if ! "$compiler" "${compile_args[@]}" \
   -o "$probe_binary" t/ci/syncrepl-c-sdk-probe.c \
-  -lldap -llber -lresolv -lsasl2 >> "$log_file" 2>&1; then
+  "${link_libraries[@]}" >> "$log_file" 2>&1; then
   for mode in "${probe_modes[@]}"; do
     record_result "$mode" FAIL compile \
       'the direct C SDK probe did not compile or link'
@@ -90,6 +98,10 @@ run_probe() {
 
   if [ "$mode" = cancel ] && [ -n "$cancel_skip_reason" ]; then
     record_result cancel SKIP compatibility "$cancel_skip_reason"
+    return
+  fi
+  if [ "$mode" = notification ] && [ -n "$notification_skip_reason" ]; then
+    record_result notification SKIP compatibility "$notification_skip_reason"
     return
   fi
 

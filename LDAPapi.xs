@@ -819,7 +819,10 @@ ldap_extended_operation_s(ld, oid, bv_val, bv_len,  sctrls, cctrls, retoidp, ret
     char *        retdatap = NO_INIT
     CODE:
     {
-       struct berval indata, *retdata;
+       struct berval indata, *retdata = NULL;
+
+       retoidp = NULL;
+       retdatap = NULL;
 
        if (bv_len == 0) {
           RETVAL = ldap_extended_operation_s(ld, oid, NULL,
@@ -834,10 +837,10 @@ ldap_extended_operation_s(ld, oid, bv_val, bv_len,  sctrls, cctrls, retoidp, ret
                                              &retoidp, &retdata);
        }
 
-       if (retdata != NULL)
+       if (retdata != NULL) {
           retdatap = ldap_strdup(retdata->bv_val);
-      
-       ber_memfree(retdata);
+          ber_bvfree(retdata);
+       }
    }
    OUTPUT:
    RETVAL
@@ -868,14 +871,16 @@ ldap_whoami_s(ld, authzid, sctrls, cctrls)
     char *        authzid = NO_INIT
     CODE:
     {
-       struct berval *retdata;
+       struct berval *retdata = NULL;
+
+       authzid = NULL;
 
        RETVAL = ldap_whoami_s(ld, &retdata, sctrls, cctrls);
 
-       if (retdata != NULL)
+       if (retdata != NULL) {
           authzid = ldap_strdup(retdata->bv_val);
-      
-       ber_memfree(retdata);
+          ber_bvfree(retdata);
+       }
     }
     OUTPUT:
     RETVAL
