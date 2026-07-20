@@ -1856,3 +1856,410 @@ ldap_control_free (ctrl)
 BerElement *
 ber_alloc_t(options);
     int options
+
+int
+LBER_USE_DER()
+    CODE:
+    {
+        RETVAL = LBER_USE_DER;
+    }
+    OUTPUT:
+    RETVAL
+
+BerElement *
+ber_init(bytes)
+    SV *bytes
+    PREINIT:
+    struct berval value;
+    STRLEN value_length;
+    char *value_bytes;
+    CODE:
+    {
+        value_bytes = SvPVbyte(bytes, value_length);
+        value.bv_val = value_bytes;
+        value.bv_len = (ber_len_t)value_length;
+        RETVAL = ber_init(&value);
+    }
+    OUTPUT:
+    RETVAL
+
+SV *
+ber_flatten(ber)
+    BerElement *ber
+    PREINIT:
+    struct berval *value = NULL;
+    CODE:
+    {
+        if (ber_flatten(ber, &value) == -1) {
+            XSRETURN_UNDEF;
+        }
+
+        RETVAL = newSVpvn(value->bv_val, value->bv_len);
+        ber_bvfree(value);
+    }
+    OUTPUT:
+    RETVAL
+
+void
+ber_printf(...)
+    PPCODE:
+    {
+        BerElement *ber;
+        char *format;
+        char operation[2];
+        I32 argument = 2;
+        int result = 0;
+
+        if (items < 2) {
+            croak("Usage: Net::LDAPapi::ber_printf(ber, format, ...)");
+        }
+
+        ber = INT2PTR(BerElement *, SvIV(ST(0)));
+        if (ber == NULL) {
+            croak("ber_printf requires a BerElement");
+        }
+
+        format = SvPV_nolen(ST(1));
+        operation[1] = '\0';
+
+        for (; *format != '\0' && result != -1; format++) {
+            STRLEN value_length;
+            char *value;
+            ber_int_t integer;
+            ber_len_t length;
+            ber_tag_t tag;
+
+            operation[0] = *format;
+
+            switch (*format) {
+            case 'b':
+            case 'e':
+            case 'i':
+                if (argument >= items) {
+                    croak("ber_printf format '%c' requires an argument", *format);
+                }
+                integer = (ber_int_t)SvIV(ST(argument++));
+                result = ber_printf(ber, operation, integer);
+                break;
+
+            case 'n':
+            case '{':
+            case '}':
+            case '[':
+            case ']':
+                result = ber_printf(ber, operation);
+                break;
+
+            case 'o':
+                if (argument >= items) {
+                    croak("ber_printf format 'o' requires an octet string");
+                }
+                value = SvPVbyte(ST(argument++), value_length);
+                result = ber_printf(ber, operation, value, (ber_len_t)value_length);
+                break;
+
+            case 'O':
+            {
+                struct berval berval;
+
+                if (argument >= items) {
+                    croak("ber_printf format 'O' requires an octet string");
+                }
+                value = SvPVbyte(ST(argument++), value_length);
+                berval.bv_val = value;
+                berval.bv_len = (ber_len_t)value_length;
+                result = ber_printf(ber, operation, &berval);
+                break;
+            }
+
+            case 's':
+                if (argument >= items) {
+                    croak("ber_printf format 's' requires a string");
+                }
+                value = SvPVbyte(ST(argument++), value_length);
+                result = ber_printf(ber, operation, value);
+                break;
+
+            case 'B':
+            case 'X':
+                if (argument + 1 >= items) {
+                    croak("ber_printf format '%c' requires a bit string and bit length", *format);
+                }
+                value = SvPVbyte(ST(argument++), value_length);
+                length = (ber_len_t)SvUV(ST(argument++));
+                if (length != 0 && (length - 1) / 8 >= value_length) {
+                    croak("ber_printf format '%c' bit length exceeds the supplied buffer", *format);
+                }
+                result = ber_printf(ber, operation, value, length);
+                break;
+
+            case 't':
+                if (argument >= items) {
+                    croak("ber_printf format 't' requires a tag");
+                }
+                tag = (ber_tag_t)SvUV(ST(argument++));
+                result = ber_printf(ber, operation, tag);
+                break;
+
+            case 'v':
+            case 'V':
+            case 'W':
+            {
+                AV *values;
+                I32 last;
+                I32 index;
+
+                if (argument >= items || !SvROK(ST(argument)) ||
+                    SvTYPE(SvRV(ST(argument))) != SVt_PVAV) {
+                    croak("ber_printf format '%c' requires an array reference", *format);
+                }
+
+                values = (AV *)SvRV(ST(argument++));
+                last = av_len(values);
+
+                if (*format == 'v') {
+                    char **strings;
+
+                    Newz(0, strings, last + 2, char *);
+                    for (index = 0; index <= last; index++) {
+                        SV **entry = av_fetch(values, index, 0);
+                        if (entry == NULL || !SvOK(*entry)) {
+                            Safefree(strings);
+                            croak("ber_printf format 'v' does not accept undef values");
+                        }
+                        strings[index] = SvPVbyte(*entry, value_length);
+                    }
+                    result = ber_printf(ber, operation, strings);
+                    Safefree(strings);
+                } else if (*format == 'V') {
+                    struct berval **bervals;
+
+                    Newz(0, bervals, last + 2, struct berval *);
+                    for (index = 0; index <= last; index++) {
+                        SV **entry = av_fetch(values, index, 0);
+                        if (entry == NULL || !SvOK(*entry)) {
+                            I32 cleanup;
+
+                            for (cleanup = 0; cleanup < index; cleanup++) {
+                                Safefree(bervals[cleanup]);
+                            }
+                            Safefree(bervals);
+                            croak("ber_printf format 'V' does not accept undef values");
+                        }
+                        Newz(0, bervals[index], 1, struct berval);
+                        bervals[index]->bv_val = SvPVbyte(*entry, value_length);
+                        bervals[index]->bv_len = (ber_len_t)value_length;
+                    }
+                    result = ber_printf(ber, operation, bervals);
+                    for (index = 0; index <= last; index++) {
+                        Safefree(bervals[index]);
+                    }
+                    Safefree(bervals);
+                } else {
+                    struct berval *bervals;
+
+                    Newz(0, bervals, last + 2, struct berval);
+                    for (index = 0; index <= last; index++) {
+                        SV **entry = av_fetch(values, index, 0);
+                        if (entry == NULL || !SvOK(*entry)) {
+                            Safefree(bervals);
+                            croak("ber_printf format 'W' does not accept undef values");
+                        }
+                        bervals[index].bv_val = SvPVbyte(*entry, value_length);
+                        bervals[index].bv_len = (ber_len_t)value_length;
+                    }
+                    result = ber_printf(ber, operation, bervals);
+                    Safefree(bervals);
+                }
+                break;
+            }
+
+            default:
+                croak("ber_printf does not support format '%c'", *format);
+            }
+        }
+
+        if (result != -1 && argument != items) {
+            croak("ber_printf received %ld unused argument(s)",
+                (long)(items - argument));
+        }
+
+        XPUSHs(sv_2mortal(newSViv(result)));
+        XSRETURN(1);
+    }
+
+void
+ber_scanf(...)
+    PPCODE:
+    {
+        BerElement *ber;
+        char *format;
+        char operation[2];
+        int output_count = 0;
+        ber_tag_t result = 0;
+
+        if (items != 2) {
+            croak("Usage: Net::LDAPapi::ber_scanf(ber, format)");
+        }
+
+        ber = INT2PTR(BerElement *, SvIV(ST(0)));
+        if (ber == NULL) {
+            croak("ber_scanf requires a BerElement");
+        }
+
+        format = SvPV_nolen(ST(1));
+        operation[1] = '\0';
+
+        for (; *format != '\0'; format++) {
+            ber_int_t integer;
+            ber_len_t length;
+            ber_tag_t tag;
+
+            operation[0] = *format;
+
+            switch (*format) {
+            case 'a':
+            case 'A':
+            {
+                char *value = NULL;
+
+                result = ber_scanf(ber, operation, &value);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format '%c'", *format);
+                }
+                if (value == NULL) {
+                    XPUSHs(&PL_sv_undef);
+                } else {
+                    XPUSHs(sv_2mortal(newSVpv(value, 0)));
+                    ber_memfree(value);
+                }
+                output_count++;
+                break;
+            }
+
+            case 'b':
+            case 'e':
+            case 'i':
+                result = ber_scanf(ber, operation, &integer);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format '%c'", *format);
+                }
+                XPUSHs(sv_2mortal(newSViv(integer)));
+                output_count++;
+                break;
+
+            case 'B':
+            {
+                char *value = NULL;
+
+                result = ber_scanf(ber, operation, &value, &length);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 'B'");
+                }
+                XPUSHs(sv_2mortal(newSVpvn(value, (length + 7) / 8)));
+                XPUSHs(sv_2mortal(newSVuv(length)));
+                ber_memfree(value);
+                output_count += 2;
+                break;
+            }
+
+            case 'l':
+                result = ber_scanf(ber, operation, &length);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 'l'");
+                }
+                XPUSHs(sv_2mortal(newSVuv(length)));
+                output_count++;
+                break;
+
+            case 'm':
+            {
+                struct berval value;
+
+                result = ber_scanf(ber, operation, &value);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 'm'");
+                }
+                XPUSHs(sv_2mortal(newSVpvn(value.bv_val, value.bv_len)));
+                output_count++;
+                break;
+            }
+
+            case 'o':
+            {
+                struct berval value;
+
+                result = ber_scanf(ber, operation, &value);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 'o'");
+                }
+                XPUSHs(sv_2mortal(newSVpvn(value.bv_val, value.bv_len)));
+                ber_memfree(value.bv_val);
+                output_count++;
+                break;
+            }
+
+            case 'O':
+            {
+                struct berval *value = NULL;
+
+                result = ber_scanf(ber, operation, &value);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 'O'");
+                }
+                XPUSHs(sv_2mortal(newSVpvn(value->bv_val, value->bv_len)));
+                ber_bvfree(value);
+                output_count++;
+                break;
+            }
+
+            case 's':
+            {
+                struct berval value;
+
+                result = ber_scanf(ber, "o", &value);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format 's'");
+                }
+                XPUSHs(sv_2mortal(newSVpvn(value.bv_val, value.bv_len)));
+                ber_memfree(value.bv_val);
+                output_count++;
+                break;
+            }
+
+            case 't':
+            case 'T':
+                result = ber_scanf(ber, operation, &tag);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format '%c'", *format);
+                }
+                XPUSHs(sv_2mortal(newSVuv(tag)));
+                output_count++;
+                break;
+
+            case 'n':
+            case 'x':
+            case '{':
+            case '}':
+            case '[':
+            case ']':
+                result = ber_scanf(ber, operation);
+                if (result == LBER_ERROR) {
+                    croak("ber_scanf failed at format '%c'", *format);
+                }
+                break;
+
+            case 'M':
+            case 'v':
+            case 'V':
+            case 'W':
+            case '!':
+                croak("ber_scanf format '%c' requires a C callback or output layout", *format);
+
+            default:
+                croak("ber_scanf does not support format '%c'", *format);
+            }
+        }
+
+        XSRETURN(output_count);
+    }

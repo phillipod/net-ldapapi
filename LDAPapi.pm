@@ -33,7 +33,8 @@ require AutoLoader;
        ldapssl_client_init ldapssl_init ldapssl_install_routines
        ldap_get_all_entries ldap_multisort_entries
        ldap_is_ldap_url ldap_url_parse ldap_url_search ldap_url_search_s
-       ldap_url_search_st ber_free ldap_init ldap_initialize ldap_start_tls_s
+       ldap_url_search_st ber_free ber_alloc_t ber_init ber_flatten
+       ber_printf ber_scanf LBER_USE_DER ldap_init ldap_initialize ldap_start_tls_s
        ldap_sasl_interactive_bind_s
        ldap_create_control ldap_control_berval
        LDAP_RES_BIND

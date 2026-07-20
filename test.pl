@@ -6,11 +6,53 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..10\n"; }
+BEGIN { $| = 1; print "1..13\n"; }
 END {print "modinit  - not ok\n" unless $loaded;}
 use Net::LDAPapi;
 $loaded = 1;
 print "modinit  - ok\n";
+
+##
+## BER printf/scanf round trip
+##
+
+$ber = ber_alloc_t(LBER_USE_DER);
+if ($ber && ber_printf($ber, '{eb}', 3, 1) >= 0)
+{
+   print "berprintf - ok\n";
+} else {
+   print "berprintf - not ok\n";
+   exit -1;
+}
+
+$encoded = ber_flatten($ber);
+ber_free($ber, 1);
+$ber = ber_init($encoded);
+($enum, $boolean) = ber_scanf($ber, '{eb}');
+ber_free($ber, 1);
+
+if ($enum == 3 && $boolean)
+{
+   print "berscanf  - ok\n";
+} else {
+   print "berscanf  - not ok\n";
+   exit -1;
+}
+
+$ber = ber_alloc_t(LBER_USE_DER);
+$oversized_bit_count_rejected = !eval {
+   ber_printf($ber, 'B', 'A', 24);
+   1;
+};
+ber_free($ber, 1);
+
+if ($oversized_bit_count_rejected && $@ =~ /bit length exceeds the supplied buffer/)
+{
+   print "berbits   - ok\n";
+} else {
+   print "berbits   - not ok\n";
+   exit -1;
+}
 
 ######################### End of black magic.
 
@@ -157,4 +199,3 @@ print "count    - ok\n";
 ##
 
 $ld->unbind();
-
