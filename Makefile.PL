@@ -1,5 +1,6 @@
 use ExtUtils::MakeMaker qw(prompt WriteMakefile);
 use Config;
+use File::Spec;
 
 print "\n\nNet::LDAPapi Perl5 Module - by Quanah Gibson-Mount <mishikal\@yahoo.com>\n\n";
 print "OpenLDAP support by Symas Corporation -- http://www.symas.com\n";
@@ -79,6 +80,45 @@ if ( $sdk == 1 && $include_sasl eq "") {
    $include_sasl=prompt("Location of SASL include files if needed:");
    chomp($include_sasl);
 }
+
+sub handle_missing_external_requirements {
+    my (@missing) = @_;
+
+    return unless @missing;
+
+    my $message = "Net::LDAPapi requires external C development files that were not found:\n" .
+        join("\n", map { "  $_" } @missing) . "\n";
+
+    if ($ENV{'AUTOMATED_TESTING'} || $ENV{'NONINTERACTIVE_TESTING'}) {
+        warn "$message";
+        warn "Skipping automated build because the required external dependencies are unavailable.\n";
+        exit 0;
+    }
+
+    die "$message";
+}
+
+my @missing_external_requirements;
+
+for my $header ('ldap.h', 'lber.h') {
+    my $path = File::Spec->catfile($include_ldap, $header);
+    push @missing_external_requirements,
+        "$path (install the OpenLDAP development headers or pass -include_path)"
+        unless -r $path;
+}
+
+my @sasl_header_paths;
+for my $include_path (grep { defined && length } ($include_sasl, $include_ldap, '/usr/include')) {
+    push @sasl_header_paths,
+        File::Spec->catfile($include_path, 'sasl', 'sasl.h'),
+        File::Spec->catfile($include_path, 'sasl.h');
+}
+
+push @missing_external_requirements,
+    'sasl/sasl.h (install the Cyrus SASL development headers or pass -sasl_include_path)'
+    unless grep { -r $_ } @sasl_header_paths;
+
+handle_missing_external_requirements(@missing_external_requirements);
 
 if ($version eq "MOZILLA")
 {
